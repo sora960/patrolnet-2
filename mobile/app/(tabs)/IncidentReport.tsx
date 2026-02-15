@@ -13,7 +13,7 @@ import {
   Animated,
   TouchableWithoutFeedback,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
+import IncidentMap, { type LatLng, type MapRegion } from "../../components/IncidentMap";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -54,7 +54,7 @@ interface IncidentReportData {
   created_at: string;
 }
 
-const DEFAULT_COORDS = {
+const DEFAULT_COORDS: LatLng = {
   latitude: 14.56535797150489,
   longitude: 121.61706714218529,
 };
@@ -71,7 +71,7 @@ const IncidentReport: React.FC = () => {
   const [incidentType, setIncidentType] = useState("Other");
   const [otherIncidentType, setOtherIncidentType] = useState("");
   const [locationLoaded, setLocationLoaded] = useState(false);
-  const [mapRegion, setMapRegion] = useState<Region>({
+  const [mapRegion, setMapRegion] = useState<MapRegion>({
     latitude: DEFAULT_COORDS.latitude,
     longitude: DEFAULT_COORDS.longitude,
     latitudeDelta: 0.02,
@@ -737,20 +737,14 @@ const IncidentReport: React.FC = () => {
             {!locationLoaded ? (
               <ActivityIndicator size="large" color="#4a90e2" />
             ) : (
-              <MapView
+              <IncidentMap
                 style={styles.map}
-                provider={PROVIDER_GOOGLE}
                 region={mapRegion}
+                pinLocation={pinLocation}
                 onPress={isViewMode ? undefined : handleMapPress}
                 scrollEnabled={isViewMode}
                 zoomEnabled={true}
-              >
-                {pinLocation && (
-                  <Marker coordinate={pinLocation} title="Incident Location">
-                    <Ionicons name="location-sharp" size={30} color="#e74c3c" />
-                  </Marker>
-                )}
-              </MapView>
+              />
             )}
           </View>
 

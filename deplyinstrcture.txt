@@ -1,5 +1,31 @@
 Deploying a full-stack project with a frontend, backend, and database involves a few steps. Here's a breakdown of how you can do it for free, using popular services.
 
+========================================
+Local Dev (Windows) - Quick Start
+========================================
+
+First time setup (run once per folder):
+
+Backend:
+	cd server
+	npm install
+	node server.js
+
+React Web Client:
+	cd client
+	npm install --legacy-peer-deps
+	npm start
+
+Expo Mobile:
+	cd mobile
+	npm install --legacy-peer-deps
+	npm run start
+
+Database:
+	- Ensure MySQL is running.
+	- Create the database (default name is `db`) and import `database/db.sql`.
+	- Or set DB env vars in `server/.env`: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME.
+
 Overall Strategy
 Your project has three main parts:
 

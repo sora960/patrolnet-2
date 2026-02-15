@@ -250,12 +250,16 @@ function ActivityDetailsModal({ isOpen, onClose, activity }) {
             )}
           </div>
 
-          {/* Resolution Image */}
+          {/* Resolution Proof (photo or video) */}
           {resolutionImageUrl && (
             <div style={imageSectionStyles}>
               <span style={detailLabelStyles}>Resolution Proof</span>
               <div style={imageContainerStyles}>
-                <img src={resolutionImageUrl} alt="Resolution Proof" style={imageStyles} />
+                {/\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i.test(activity.resolutionImage || '') ? (
+                  <video src={resolutionImageUrl} style={imageStyles} controls playsInline />
+                ) : (
+                  <img src={resolutionImageUrl} alt="Resolution Proof" style={imageStyles} />
+                )}
               </div>
             </div>
           )}

@@ -8,10 +8,10 @@ app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: '127.0.0.1',         // or 'localhost'
-  user: 'root',              // default MySQL user
-  password: '',              // your MySQL password ('' if none)
-  database: 'db'     // your DB name
+  host: process.env.DB_HOST || '127.0.0.1', // or 'localhost'
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'db',
 });
 
 db.connect((err) => {

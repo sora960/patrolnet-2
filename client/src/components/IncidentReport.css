@@ -28,7 +28,30 @@
 .incident-controls {
   margin-bottom: 15px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.incident-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.incident-groupby {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #374151;
+  font-size: 13px;
+}
+
+.incident-groupby select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
 }
 
 .incident-search {
@@ -36,6 +59,119 @@
   border: 1px solid #ddd;
   border-radius: 6px;
   width: 250px;
+}
+
+.incident-list-wrapper {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0px 2px 8px rgba(0,0,0,0.05);
+}
+
+.incident-group {
+  border-top: 1px solid #eee;
+}
+
+.incident-group:first-child {
+  border-top: none;
+}
+
+.incident-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 14px;
+  background: #f9fafb;
+}
+
+.incident-group-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.incident-group-count {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.incident-card-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.incident-card {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #eee;
+  align-items: center;
+}
+
+.incident-card:first-child {
+  border-top: none;
+}
+
+.incident-card-image {
+  width: 90px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.incident-card-image--placeholder {
+  border: 1px dashed #d1d5db;
+}
+
+.incident-card-body {
+  min-width: 0;
+}
+
+.incident-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.incident-card-id {
+  font-weight: 700;
+  color: #111827;
+  font-size: 13px;
+}
+
+.incident-card-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.incident-card-date {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.incident-card-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #374151;
+  display: grid;
+  gap: 4px;
+}
+
+.incident-card-actions {
+  display: flex;
+  align-items: center;
 }
 
 .incident-table-wrapper {
@@ -169,4 +305,135 @@
   color: #2563eb;
   font-weight: 500;
   text-decoration: underline;
+}
+
+/* =====================
+   Print (non-tabular)
+   ===================== */
+.incident-print-list {
+  display: none;
+}
+
+@media print {
+  /* Hide app chrome + interactive controls */
+  .incident-controls,
+  .incident-table-wrapper,
+  .incident-list-wrapper,
+  .btn,
+  button,
+  input {
+    display: none !important;
+  }
+
+  /* Try to hide common sidebars in this project */
+  .sidebar,
+  .admin-sidebar,
+  .tanod-sidebar,
+  .sidebar-container {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  .dashboard {
+    background: #ffffff !important;
+  }
+
+  .incident-container {
+    padding: 0 !important;
+  }
+
+  /* Show print list */
+  .incident-print-list {
+    display: block !important;
+    padding: 0;
+    color: #111827;
+  }
+
+  .incident-print-header {
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #111827;
+  }
+
+  .incident-print-header h1 {
+    font-size: 20px;
+    margin: 0;
+  }
+
+  .incident-print-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #4b5563;
+  }
+
+  .incident-print-empty {
+    font-size: 14px;
+    color: #374151;
+  }
+
+  .incident-print-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 0 0 12px 0;
+    page-break-inside: avoid;
+  }
+
+  .incident-print-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+
+  .incident-print-id {
+    font-weight: 700;
+    font-size: 14px;
+    color: #111827;
+  }
+
+  .incident-print-status {
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .incident-print-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+  }
+
+  .incident-print-label {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 2px;
+  }
+
+  .incident-print-value {
+    font-size: 13px;
+    color: #111827;
+    word-break: break-word;
+  }
+
+  .incident-print-group {
+    margin-bottom: 14px;
+  }
+
+  .incident-print-group-title {
+    font-weight: 800;
+    font-size: 13px;
+    margin: 0 0 8px 0;
+    color: #111827;
+  }
+
+  /* Reuse existing status colors but ensure they're printable */
+  .status-yellow,
+  .status-blue,
+  .status-green {
+    background: transparent !important;
+    color: #111827 !important;
+  }
 }

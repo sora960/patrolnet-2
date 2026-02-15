@@ -11,6 +11,8 @@ const ScheduleAssignment = () => {
   const [personnel, setPersonnel] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [evidencePerson, setEvidencePerson] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false); // State to toggle calendar view
   const [formData, setFormData] = useState({ status: '', location: '', day: '', start_time: '', end_time: '', month: 'All' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,6 +26,33 @@ const ScheduleAssignment = () => {
   const getImageUrl = (imageName) => {
     if (!imageName) return null;
     return `${BASE_URL}/uploads/${imageName}`;
+  };
+
+  const getMediaUrl = (filename) => {
+    if (!filename) return null;
+    return `${BASE_URL}/uploads/${filename}`;
+  };
+
+  const hasAnyEvidence = (logs) => {
+    const timeIn = logs?.timeIn;
+    const timeOut = logs?.timeOut;
+    return Boolean(
+      timeIn?.photo ||
+      timeIn?.video ||
+      timeOut?.photo ||
+      timeOut?.video
+    );
+  };
+
+  const getUserTimeStatusPayload = async (username) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/user-time-status/${username}`);
+      if (response.data && response.data.success) return response.data;
+      return null;
+    } catch (err) {
+      console.error(`Error fetching user time status for ${username}:`, err);
+      return null;
+    }
   };
 
   // Function to get the most recent log time for display
@@ -90,13 +119,30 @@ const ScheduleAssignment = () => {
 
         const allSchedules = schedulesResponse.data || [];
 
+        const normalizeUsername = (value) => String(value || '').trim().toLowerCase();
+
         // Calculate status and get log times for each personnel
         const personnelWithCalculatedData = await Promise.all(
           tanodResponse.data.map(async (person) => {
             // Find the schedule for this person
-            const personSchedule = allSchedules.find(schedule => schedule.USER === person.USER);
+            const personSchedule = allSchedules.find((schedule) => {
+              // Prefer matching by FK if present
+              if (schedule?.user_id != null && person?.ID != null) {
+                return Number(schedule.user_id) === Number(person.ID ?? person.ID);
+              }
 
-            const calculatedStatus = await calculateStatusFromLogs(person.USER);
+              // Some rows (e.g., older sync) may not have user_id populated; fall back to ID match
+              if (schedule?.ID != null && person?.ID != null) {
+                return Number(schedule.ID) === Number(person.ID);
+              }
+
+              // Final fallback: normalized username match
+              return normalizeUsername(schedule?.USER) === normalizeUsername(person?.USER);
+            });
+
+            const statusPayload = await getUserTimeStatusPayload(person.USER);
+            const calculatedStatus = statusPayload?.calculatedStatus || 'Off Duty';
+            const evidenceLogs = statusPayload?.logs || null;
             const logData = await getMostRecentLogTime(person.USER);
 
             return {
@@ -111,7 +157,9 @@ const ScheduleAssignment = () => {
               END_TIME: personSchedule?.END_TIME || null,
               CALCULATED_STATUS: calculatedStatus,
               LOG_TIME: logData?.time || null,
-              LOG_LOCATION: logData?.location || null // Add log location
+              LOG_LOCATION: logData?.location || null, // Add log location
+              EVIDENCE_LOGS: evidenceLogs,
+              HAS_EVIDENCE: hasAnyEvidence(evidenceLogs)
             };
           })
         );
@@ -161,15 +209,34 @@ const ScheduleAssignment = () => {
     setShowModal(false);
   };
 
+  const openEvidenceModal = (person) => {
+    setEvidencePerson(person);
+    setShowEvidenceModal(true);
+  };
+
+  const closeEvidenceModal = () => {
+    setShowEvidenceModal(false);
+    setEvidencePerson(null);
+  };
+
   const handleSave = async () => {
     try {
+      const dayList = Array.isArray(formData.day)
+        ? formData.day.map(d => String(d).trim()).filter(Boolean)
+        : String(formData.day || '').split(',').map(d => d.trim()).filter(Boolean);
+
+      if (!dayList.length || !String(formData.start_time || '').trim() || !String(formData.end_time || '').trim()) {
+        setError('Please select at least one day and set start/end time before saving.');
+        return;
+      }
+
       let response;
       if (selectedPerson.SCHEDULE_ID) {
         // Update existing schedule
         response = await axios.put(`${BASE_URL}/api/schedules/${selectedPerson.SCHEDULE_ID}`, {
           location: formData.location,
           // Join the array of days into a comma-separated string for the DB
-          day: Array.isArray(formData.day) ? formData.day.join(', ') : formData.day,
+          day: dayList.join(', '),
           start_time: formData.start_time,
           end_time: formData.end_time,
           month: formData.month
@@ -180,7 +247,7 @@ const ScheduleAssignment = () => {
           user: selectedPerson.USER,
           location: formData.location,
           // Join the array of days into a comma-separated string for the DB
-          day: Array.isArray(formData.day) ? formData.day.join(', ') : formData.day,
+          day: dayList.join(', '),
           start_time: formData.start_time,
           end_time: formData.end_time,
           month: formData.month
@@ -191,11 +258,16 @@ const ScheduleAssignment = () => {
         await loadSchedules();
         closeModal();
       } else {
-        setError('Failed to update schedule. Please try again.');
+        setError(response?.data?.message || 'Failed to update schedule. Please try again.');
       }
     } catch (err) {
       console.error('Error updating schedule:', err);
-      setError('An error occurred while updating the schedule.');
+      const serverMessage = err?.response?.data?.message || err?.response?.data?.error;
+      if (serverMessage) {
+        setError(serverMessage);
+      } else {
+        setError('An error occurred while updating the schedule.');
+      }
     }
   };
 
@@ -217,6 +289,30 @@ const ScheduleAssignment = () => {
       } catch (err) {
         console.error('Error clearing schedule:', err);
         setError('An error occurred while clearing the schedule.');
+      }
+    }
+  };
+
+  const handleDeleteScheduleFromRow = async (person) => {
+    if (!person || !person.SCHEDULE_ID) {
+      setError('No schedule to delete for this person.');
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete the schedule for ${person.USER}?`)) {
+      try {
+        const response = await axios.delete(`${BASE_URL}/api/schedules/${person.SCHEDULE_ID}`);
+        if (response.data.success) {
+          await loadSchedules();
+          if (selectedPerson && selectedPerson.USER === person.USER) {
+            closeModal();
+          }
+        } else {
+          setError('Failed to delete schedule. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error deleting schedule:', err);
+        setError('An error occurred while deleting the schedule.');
       }
     }
   };
@@ -296,6 +392,108 @@ const ScheduleAssignment = () => {
           onClear={handleClearSchedule}
           getImageUrl={getImageUrl}
         />
+
+        {showEvidenceModal && evidencePerson && (
+          <div className="evidence-modal-overlay" onClick={closeEvidenceModal}>
+            <div className="evidence-modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="evidence-modal-header">
+                <div>
+                  <div className="evidence-modal-title">Evidence</div>
+                  <div className="evidence-modal-subtitle">{evidencePerson.USER}</div>
+                </div>
+                <button className="evidence-modal-close" onClick={closeEvidenceModal} aria-label="Close evidence modal">
+                  ×
+                </button>
+              </div>
+
+              <div className="evidence-modal-body">
+                {evidencePerson.HAS_EVIDENCE ? (
+                  <>
+                    <div className="evidence-section">
+                      <div className="evidence-section-title">Time In</div>
+                      <div className="evidence-meta">{evidencePerson.EVIDENCE_LOGS?.timeIn?.time || '—'}</div>
+
+                      <div className="evidence-media-grid">
+                        <div className="evidence-media-card">
+                          <div className="evidence-media-label">Photo</div>
+                          {evidencePerson.EVIDENCE_LOGS?.timeIn?.photo ? (
+                            <>
+                              <a className="evidence-link" href={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeIn.photo)} target="_blank" rel="noreferrer">
+                                Open Photo
+                              </a>
+                              <img
+                                className="evidence-image"
+                                src={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeIn.photo)}
+                                alt="Time in evidence"
+                              />
+                            </>
+                          ) : (
+                            <div className="evidence-empty">No photo</div>
+                          )}
+                        </div>
+
+                        <div className="evidence-media-card">
+                          <div className="evidence-media-label">Video</div>
+                          {evidencePerson.EVIDENCE_LOGS?.timeIn?.video ? (
+                            <>
+                              <a className="evidence-link" href={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeIn.video)} target="_blank" rel="noreferrer">
+                                Open Video
+                              </a>
+                              <video className="evidence-video" controls src={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeIn.video)} />
+                            </>
+                          ) : (
+                            <div className="evidence-empty">No video</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="evidence-section">
+                      <div className="evidence-section-title">Time Out</div>
+                      <div className="evidence-meta">{evidencePerson.EVIDENCE_LOGS?.timeOut?.time || '—'}</div>
+
+                      <div className="evidence-media-grid">
+                        <div className="evidence-media-card">
+                          <div className="evidence-media-label">Photo</div>
+                          {evidencePerson.EVIDENCE_LOGS?.timeOut?.photo ? (
+                            <>
+                              <a className="evidence-link" href={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeOut.photo)} target="_blank" rel="noreferrer">
+                                Open Photo
+                              </a>
+                              <img
+                                className="evidence-image"
+                                src={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeOut.photo)}
+                                alt="Time out evidence"
+                              />
+                            </>
+                          ) : (
+                            <div className="evidence-empty">No photo</div>
+                          )}
+                        </div>
+
+                        <div className="evidence-media-card">
+                          <div className="evidence-media-label">Video</div>
+                          {evidencePerson.EVIDENCE_LOGS?.timeOut?.video ? (
+                            <>
+                              <a className="evidence-link" href={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeOut.video)} target="_blank" rel="noreferrer">
+                                Open Video
+                              </a>
+                              <video className="evidence-video" controls src={getMediaUrl(evidencePerson.EVIDENCE_LOGS.timeOut.video)} />
+                            </>
+                          ) : (
+                            <div className="evidence-empty">No video</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="evidence-empty">No evidence uploaded yet.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="error-message">
@@ -390,9 +588,26 @@ const ScheduleAssignment = () => {
                             onClick={() => handleClick(person)}
                             className="btn btn-edit"
                           >
-       
-                            Add
+                            {person.SCHEDULE_ID ? 'Edit' : 'Add'}
                           </button>
+
+                          <button
+                            onClick={() => openEvidenceModal(person)}
+                            className="btn btn-secondary btn-evidence"
+                            disabled={!person.HAS_EVIDENCE}
+                            title={person.HAS_EVIDENCE ? 'View evidence' : 'No evidence yet'}
+                          >
+                            Evidence
+                          </button>
+
+                          {person.SCHEDULE_ID && (
+                            <button
+                              onClick={() => handleDeleteScheduleFromRow(person)}
+                              className="btn btn-delete"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))

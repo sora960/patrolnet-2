@@ -8,13 +8,40 @@ const fs = require("fs");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
+// Optional (but recommended) video transcoding for browser compatibility.
+// If dependencies are missing, the server will continue without transcoding.
+let ffmpeg = null;
+try {
+  const ffmpegPath = require("ffmpeg-static");
+  // eslint-disable-next-line global-require
+  ffmpeg = require("fluent-ffmpeg");
+  if (ffmpegPath && ffmpeg?.setFfmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
+} catch (e) {
+  console.warn(
+    "⚠️ ffmpeg not available; uploaded videos will not be transcoded:",
+    e?.message || e
+  );
+}
+
 const app = express();
 app.use(cors());
 app.set('trust proxy', true); // Enable trust for req.ip
 app.use(express.json());
 
-// Serve uploaded images statically
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Serve uploaded media statically
+// Force correct video MIME types (some environments report .mp4 as application/mp4, which breaks playback on Android).
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res, filePath) => {
+      const lower = String(filePath || "").toLowerCase();
+      if (lower.endsWith(".mp4")) res.setHeader("Content-Type", "video/mp4");
+      if (lower.endsWith(".mov")) res.setHeader("Content-Type", "video/quicktime");
+      if (lower.endsWith(".m4v")) res.setHeader("Content-Type", "video/x-m4v");
+      if (lower.endsWith(".webm")) res.setHeader("Content-Type", "video/webm");
+    },
+  })
+);
 app.use("/uploads/resolutions", express.static(path.join(__dirname, "uploads/resolutions")));
 
 // Create uploads folder if it doesn't exist
@@ -43,12 +70,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// MySQL connection
+// MySQL connection (configurable via .env)
 const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "db",
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "db",
 });
 
 db.connect((err) => {
@@ -56,8 +83,110 @@ db.connect((err) => {
     console.error("❌ MySQL connection failed:", err);
   } else {
     console.log("✅ Connected to MySQL");
+    ensureFirewallTables().catch((e) => {
+      console.warn("⚠️ Failed to ensure firewall tables:", e);
+    });
+    ensureAttendanceSchema().catch((e) => {
+      console.warn("⚠️ Failed to ensure attendance schema:", e);
+    });
   }
 });
+
+async function ensureAttendanceSchema() {
+  // Ensure the logs table can store attendance proof fields.
+  // This is intentionally idempotent so it can run on every startup.
+
+  // Ensure the table exists (older DBs may be missing it).
+  await db
+    .promise()
+    .query(
+      `CREATE TABLE IF NOT EXISTS logs (
+        ID INT(255) NOT NULL AUTO_INCREMENT,
+        USER VARCHAR(255) NOT NULL,
+        TIME VARCHAR(255) NOT NULL,
+        TIME_IN VARCHAR(255) DEFAULT NULL,
+        TIME_OUT VARCHAR(255) DEFAULT NULL,
+        LOCATION VARCHAR(255) DEFAULT NULL,
+        ACTION VARCHAR(255) NOT NULL,
+        time_in_photo VARCHAR(255) DEFAULT NULL,
+        time_out_photo VARCHAR(255) DEFAULT NULL,
+        time_in_video VARCHAR(255) DEFAULT NULL,
+        time_out_video VARCHAR(255) DEFAULT NULL,
+        PRIMARY KEY (ID)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;`
+    );
+
+  // Ensure ID is AUTO_INCREMENT (some DB dumps miss this ALTER).
+  try {
+    await db.promise().query("ALTER TABLE logs MODIFY ID INT(255) NOT NULL AUTO_INCREMENT");
+  } catch (e) {
+    // Safe to ignore if already configured.
+  }
+
+  // Ensure proof columns exist (ignore if they already exist).
+  const addColumnIfMissing = async (sql) => {
+    try {
+      await db.promise().query(sql);
+    } catch (e) {
+      // ER_DUP_FIELDNAME (1060) -> already exists
+      if (e && (e.code === 'ER_DUP_FIELDNAME' || e.errno === 1060)) return;
+      throw e;
+    }
+  };
+
+  await addColumnIfMissing("ALTER TABLE logs ADD COLUMN time_in_photo VARCHAR(255) DEFAULT NULL");
+  await addColumnIfMissing("ALTER TABLE logs ADD COLUMN time_out_photo VARCHAR(255) DEFAULT NULL");
+  await addColumnIfMissing("ALTER TABLE logs ADD COLUMN time_in_video VARCHAR(255) DEFAULT NULL");
+  await addColumnIfMissing("ALTER TABLE logs ADD COLUMN time_out_video VARCHAR(255) DEFAULT NULL");
+}
+
+async function ensureFirewallTables() {
+  // Keep this idempotent so it is safe on every startup.
+  await db
+    .promise()
+    .query(
+      `CREATE TABLE IF NOT EXISTS firewall_access_logs (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        ip_address VARCHAR(64) NOT NULL,
+        user VARCHAR(255) DEFAULT NULL,
+        action VARCHAR(255) NOT NULL,
+        status VARCHAR(32) NOT NULL,
+        timestamp DATETIME NOT NULL,
+        device_id VARCHAR(255) DEFAULT NULL,
+        PRIMARY KEY (id),
+        KEY idx_timestamp (timestamp),
+        KEY idx_ip_address (ip_address)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;`
+    );
+
+  // Optional: firewall blocklist used by middleware. Keep idempotent.
+  await db
+    .promise()
+    .query(
+      `CREATE TABLE IF NOT EXISTS firewall_blocked_ips (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        ip_address VARCHAR(64) NOT NULL,
+        reason VARCHAR(255) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_ip_address (ip_address)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;`
+    );
+
+  // Optional: resident notification logs table (used by /api/logs_resident and notifications).
+  await db
+    .promise()
+    .query(
+      `CREATE TABLE IF NOT EXISTS logs_resident (
+        ID INT(255) NOT NULL AUTO_INCREMENT,
+        USER VARCHAR(255) NOT NULL,
+        TIME VARCHAR(255) NOT NULL,
+        LOCATION VARCHAR(255) DEFAULT NULL,
+        ACTION VARCHAR(255) NOT NULL,
+        PRIMARY KEY (ID)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;`
+    );
+}
 
 // --- Firewall Middleware ---
 
@@ -69,15 +198,31 @@ async function refreshBlockedIps() {
     blockedIpSet = new Set(results.map(row => row.ip_address));
     console.log(`✅ Firewall blocklist refreshed. ${blockedIpSet.size} IPs are blocked.`);
   } catch (err) {
+    // If the firewall feature isn't initialized in the DB yet, don't block server startup.
+    if (err && (err.code === 'ER_NO_SUCH_TABLE' || err.errno === 1146)) {
+      console.warn("⚠️ Firewall blocklist table missing (firewall_blocked_ips). Skipping refresh.");
+      blockedIpSet = new Set();
+      return;
+    }
     console.error("❌ Failed to refresh firewall blocklist:", err);
   }
 }
 
 // Middleware to check for blocked IPs on every request
-const firewallMiddleware = (req, res, next) => {
-  const clientIp = req.ip;
+function normalizeIp(ip) {
+  const raw = String(ip || "").trim();
+  if (!raw) return raw;
+  // Express may return IPv4-mapped IPv6 like ::ffff:192.168.1.61
+  const v4mapped = raw.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+  if (v4mapped?.[1]) return v4mapped[1];
+  return raw;
+}
 
-  if (blockedIpSet.has(clientIp)) {
+const firewallMiddleware = (req, res, next) => {
+  const rawIp = req.ip;
+  const clientIp = normalizeIp(rawIp);
+
+  if (blockedIpSet.has(clientIp) || blockedIpSet.has(rawIp)) {
     // Log the blocked attempt
     logAccessAttempt(clientIp, 'unknown', `${req.method} ${req.originalUrl}`, 'Blocked', null);
     
@@ -149,7 +294,7 @@ function logAccessAttempt(ip, user, action, status, deviceId = null) {
 app.post("/login", (req, res) => {
   console.log("Login attempt received.");
   const { username, password, clientType, deviceId } = req.body;
-  const ipAddress = req.ip || req.connection.remoteAddress;
+  const ipAddress = normalizeIp(req.ip || req.connection?.remoteAddress);
 
   if (!username || !password) {
     console.log("Missing username or password.");
@@ -185,9 +330,10 @@ app.post("/login", (req, res) => {
     console.log(`User role from DB (original): '${user.ROLE}'`); // New log
     console.log(`User role from DB (lowercase): '${user.ROLE.toLowerCase()}'`); // New log
 
-    // Check if user status allows login
-    if (user.STATUS !== "Verified") {
-      if (user.STATUS === "Pending") {
+    // Check if user status allows login (case/whitespace-insensitive)
+    const normalizedStatus = String(user.STATUS || "").trim().toLowerCase();
+    if (normalizedStatus !== "verified") {
+      if (normalizedStatus === "pending") {
         console.log("Account pending verification.");
         logAccessAttempt(ipAddress, username, 'POST /login', 'Failed');
         return res.status(403).json({ 
@@ -219,7 +365,8 @@ app.post("/login", (req, res) => {
     console.log(`Allowed Roles for this client type: ${JSON.stringify(allowedRoles)}`); // New log
 
     // Check if user.ROLE is defined and not empty
-    if (!user.ROLE || user.ROLE.trim() === '') {
+    const normalizedRole = String(user.ROLE || "").trim().toLowerCase();
+    if (!normalizedRole) {
       console.log(`Access denied: User role is undefined or empty for user ${user.USER}.`);
       logAccessAttempt(ipAddress, username, 'POST /login', 'Blocked', deviceId);
       return res.status(403).json({
@@ -228,7 +375,7 @@ app.post("/login", (req, res) => {
     }
 
     // Check if user role is allowed for this client (case-insensitive)
-    if (!allowedRoles.includes(user.ROLE.toLowerCase())) {
+    if (!allowedRoles.includes(normalizedRole)) {
       console.log(`Access denied for role ${user.ROLE} on ${clientName}.`); // Added quotes for clarity
       logAccessAttempt(ipAddress, username, 'POST /login', 'Blocked', deviceId);
       return res.status(403).json({
@@ -1345,6 +1492,24 @@ app.post("/api/schedules", (req, res) => {
   if (!user) {
     return res.status(400).json({ success: false, message: "User is required" });
   }
+
+  const normalizeDayValue = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v).trim()).filter(Boolean).join(", ");
+    }
+    return typeof value === "string" ? value.trim() : "";
+  };
+
+  const normalizedDay = normalizeDayValue(day);
+  const normalizedStart = typeof start_time === "string" ? start_time.trim() : "";
+  const normalizedEnd = typeof end_time === "string" ? end_time.trim() : "";
+
+  if (!normalizedDay || !normalizedStart || !normalizedEnd) {
+    return res.status(400).json({
+      success: false,
+      message: "Day, start time, and end time are required.",
+    });
+  }
   
   // Get the user's ID and IMAGE first to keep it consistent
   const getUserSQL = "SELECT ID, IMAGE FROM users WHERE USER = ?";
@@ -1381,7 +1546,7 @@ app.post("/api/schedules", (req, res) => {
         
         db.query(
           insertSQL, 
-          [userId, user, 'Off Duty', location || null, day, start_time, end_time, userImage, month || 'All'], // Default status to 'Off Duty'
+          [userId, user, 'Off Duty', location || null, normalizedDay, normalizedStart, normalizedEnd, userImage, month || 'All'], // Default status to 'Off Duty'
           (insertErr, result) => {
           if (insertErr) {
             console.error("❌ SQL insert error:", insertErr);
@@ -1564,6 +1729,10 @@ app.get("/api/logs_resident/:user", (req, res) => {
   
   db.query(sql, [username], (err, results) => {
     if (err) {
+      if (err && (err.code === 'ER_NO_SUCH_TABLE' || err.errno === 1146)) {
+        console.warn("⚠️ logs_resident table missing; returning empty logs.");
+        return res.json([]);
+      }
       console.error("❌ SQL error fetching user logs:", err);
       return res.status(500).json({ error: "Failed to fetch user logs" });
     }
@@ -1598,6 +1767,43 @@ app.put("/api/schedules/:id", (req, res) => {
   if (!scheduleId) {
     return res.status(400).json({ success: false, message: "Schedule ID is required" });
   }
+
+  const normalizeDayValue = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v).trim()).filter(Boolean).join(", ");
+    }
+    return typeof value === "string" ? value.trim() : "";
+  };
+
+  if (day !== undefined) {
+    const normalizedDay = normalizeDayValue(day);
+    if (!normalizedDay) {
+      return res.status(400).json({
+        success: false,
+        message: "Day cannot be empty. Please select at least one day.",
+      });
+    }
+  }
+
+  if (start_time !== undefined) {
+    const normalizedStart = typeof start_time === "string" ? start_time.trim() : "";
+    if (!normalizedStart) {
+      return res.status(400).json({
+        success: false,
+        message: "Start time cannot be empty.",
+      });
+    }
+  }
+
+  if (end_time !== undefined) {
+    const normalizedEnd = typeof end_time === "string" ? end_time.trim() : "";
+    if (!normalizedEnd) {
+      return res.status(400).json({
+        success: false,
+        message: "End time cannot be empty.",
+      });
+    }
+  }
   
   // Build the SQL query for updating schedule
   let sql = "UPDATE schedules SET";
@@ -1618,7 +1824,7 @@ app.put("/api/schedules/:id", (req, res) => {
 
   if (day !== undefined) {
     updates.push(" DAY = ?");
-    params.push(day);
+    params.push(normalizeDayValue(day));
   }
 
   if (start_time !== undefined) {
@@ -1708,24 +1914,99 @@ app.delete("/api/schedules/:id", (req, res) => {
   if (!scheduleId) {
     return res.status(400).json({ success: false, message: "Schedule ID is required" });
   }
-  
-  const sql = "DELETE FROM schedules WHERE ID = ?";
-  
-  db.query(sql, [scheduleId], (err, result) => {
-    if (err) {
-      console.error("❌ SQL delete error:", err);
+
+  (async () => {
+    try {
+      // Find the user for this schedule so we can clean up evidence.
+      const [scheduleRows] = await db
+        .promise()
+        .query("SELECT USER FROM schedules WHERE ID = ? LIMIT 1", [scheduleId]);
+
+      if (!scheduleRows || scheduleRows.length === 0) {
+        return res.status(404).json({ success: false, message: "Schedule entry not found" });
+      }
+
+      const scheduleUser = scheduleRows[0]?.USER;
+
+      // Delete the schedule row.
+      await db.promise().query("DELETE FROM schedules WHERE ID = ?", [scheduleId]);
+
+      // If we can't resolve a username, we still return success for schedule deletion.
+      if (!scheduleUser) {
+        return res.json({ success: true, message: "Schedule entry deleted successfully" });
+      }
+
+      // Collect and delete uploaded evidence files referenced by this user.
+      let deletedFiles = 0;
+      let clearedRows = 0;
+
+      const uploadsRoot = path.join(__dirname, "uploads");
+      const safeDeleteUploadFile = (filename) => {
+        const name = typeof filename === "string" ? filename.trim() : "";
+        if (!name) return;
+        const base = path.basename(name);
+        // Prevent path traversal; only delete files directly under /uploads.
+        if (base !== name) return;
+        const fullPath = path.join(uploadsRoot, base);
+        try {
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+            deletedFiles += 1;
+          }
+        } catch (e) {
+          console.warn("⚠️ Failed deleting upload:", fullPath, e?.message || e);
+        }
+      };
+
+      try {
+        const [logRows] = await db.promise().query(
+          `SELECT ID, time_in_photo, time_in_video, time_out_photo, time_out_video
+           FROM logs
+           WHERE USER = ?
+             AND (
+               time_in_photo IS NOT NULL OR time_in_video IS NOT NULL OR
+               time_out_photo IS NOT NULL OR time_out_video IS NOT NULL
+             )`,
+          [scheduleUser]
+        );
+
+        if (Array.isArray(logRows) && logRows.length > 0) {
+          const uniqueNames = new Set();
+          for (const row of logRows) {
+            [row.time_in_photo, row.time_in_video, row.time_out_photo, row.time_out_video]
+              .filter(Boolean)
+              .forEach((n) => uniqueNames.add(String(n)));
+          }
+
+          for (const filename of uniqueNames) safeDeleteUploadFile(filename);
+
+          const [updateResult] = await db.promise().query(
+            `UPDATE logs
+             SET time_in_photo = NULL,
+                 time_in_video = NULL,
+                 time_out_photo = NULL,
+                 time_out_video = NULL
+             WHERE USER = ?`,
+            [scheduleUser]
+          );
+
+          clearedRows = updateResult?.affectedRows || 0;
+        }
+      } catch (e) {
+        // If logs table doesn't exist or query fails, don't block schedule deletion.
+        console.warn("⚠️ Evidence cleanup skipped due to DB error:", e?.message || e);
+      }
+
+      return res.json({
+        success: true,
+        message: "Schedule entry deleted successfully (evidence cleared)",
+        evidence: { user: scheduleUser, deletedFiles, clearedRows },
+      });
+    } catch (err) {
+      console.error("❌ Schedule delete + evidence cleanup error:", err);
       return res.status(500).json({ success: false, message: "Database error" });
     }
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Schedule entry not found" });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: "Schedule entry deleted successfully" 
-    });
-  });
+  })();
 });
 
 // API endpoint to fetch all schedules with IMAGE included
@@ -1749,6 +2030,17 @@ app.get("/api/user-time-status/:username", async (req, res) => {
   }
   
   try {
+    const uploadFilenameIfExists = (maybeFilename) => {
+      const filename = typeof maybeFilename === 'string' ? maybeFilename.trim() : '';
+      if (!filename) return null;
+      try {
+        const fullPath = path.join(__dirname, 'uploads', filename);
+        return fs.existsSync(fullPath) ? filename : null;
+      } catch {
+        return null;
+      }
+    };
+
     // Get current GMT+8 time
     const currentTime = getGMT8Time();
     const today = currentTime.slice(0, 10); // Get date part (YYYY-MM-DD)
@@ -1761,21 +2053,127 @@ app.get("/api/user-time-status/:username", async (req, res) => {
       });
     });
 
-    // Helper function to check if there is a valid schedule for today
+    // Helper function to check if there is a valid schedule for today.
+    // Supports multi-day schedules like "Tuesday, Thursday, F" and checks time window.
     const hasValidScheduleToday = (schedule) => {
       if (!schedule || !schedule.DAY || !schedule.START_TIME || !schedule.END_TIME || !schedule.MONTH) {
         return false;
       }
+
       const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       const now = new Date();
       const todayDayName = dayNames[now.getDay()];
       const currentMonthName = monthNames[now.getMonth()];
-      
-      const isMonthMatch = schedule.MONTH === 'All' || schedule.MONTH.toLowerCase() === currentMonthName.toLowerCase();
-      const isDayMatch = schedule.DAY.toLowerCase() === todayDayName.toLowerCase();
 
-      return isDayMatch && isMonthMatch;
+      const normalizeToken = (t) => String(t || "").trim().toLowerCase();
+
+      const dayTokenToDayName = (token) => {
+        const t = normalizeToken(token);
+        if (!t) return null;
+
+        const full = {
+          sunday: "Sunday",
+          monday: "Monday",
+          tuesday: "Tuesday",
+          wednesday: "Wednesday",
+          thursday: "Thursday",
+          friday: "Friday",
+          saturday: "Saturday",
+        };
+        if (full[t]) return full[t];
+
+        const abbr3 = {
+          sun: "Sunday",
+          mon: "Monday",
+          tue: "Tuesday",
+          tues: "Tuesday",
+          wed: "Wednesday",
+          thu: "Thursday",
+          thur: "Thursday",
+          thurs: "Thursday",
+          fri: "Friday",
+          sat: "Saturday",
+        };
+        if (abbr3[t]) return abbr3[t];
+
+        const abbrShort = {
+          su: "Sunday",
+          mo: "Monday",
+          tu: "Tuesday",
+          we: "Wednesday",
+          th: "Thursday",
+          fr: "Friday",
+          sa: "Saturday",
+          s: "Sunday",
+          m: "Monday",
+          w: "Wednesday",
+          f: "Friday",
+        };
+        if (abbrShort[t]) return abbrShort[t];
+
+        return null;
+      };
+
+      const parseTimeToMinutes = (timeStr) => {
+        const raw = String(timeStr || "").trim();
+        if (!raw) return null;
+
+        // 12-hour like "9:00 AM"
+        const ampm = raw.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+        if (ampm) {
+          let h = Number(ampm[1]);
+          const m = Number(ampm[2]);
+          const mer = ampm[3].toLowerCase();
+          if (mer === "pm" && h !== 12) h += 12;
+          if (mer === "am" && h === 12) h = 0;
+          return h * 60 + m;
+        }
+
+        // 24-hour like "09:00" or "09:00:00"
+        const parts = raw.split(":");
+        if (parts.length >= 2) {
+          const h = Number(parts[0]);
+          const m = Number(parts[1]);
+          if (Number.isFinite(h) && Number.isFinite(m)) {
+            return h * 60 + m;
+          }
+        }
+
+        return null;
+      };
+
+      const scheduleDays = String(schedule.DAY)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(dayTokenToDayName)
+        .filter(Boolean);
+
+      const isDayMatch = scheduleDays.length > 0
+        ? scheduleDays.some((d) => d.toLowerCase() === todayDayName.toLowerCase())
+        : normalizeToken(schedule.DAY) === todayDayName.toLowerCase();
+
+      const months = String(schedule.MONTH)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const isMonthMatch = months.some((m) => normalizeToken(m) === "all")
+        || months.some((m) => normalizeToken(m) === currentMonthName.toLowerCase());
+
+      const startMin = parseTimeToMinutes(schedule.START_TIME);
+      const endMin = parseTimeToMinutes(schedule.END_TIME);
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+
+      // If times can't be parsed, fall back to day+month only.
+      const isWithinTime =
+        startMin == null || endMin == null
+          ? true
+          : startMin <= endMin
+            ? nowMin >= startMin && nowMin <= endMin
+            : nowMin >= startMin || nowMin <= endMin; // overnight shift
+
+      return isDayMatch && isMonthMatch && isWithinTime;
     };
 
     if (!schedule) {
@@ -1794,27 +2192,22 @@ app.get("/api/user-time-status/:username", async (req, res) => {
         message: "No schedule found for user"
       });
     }
-    // Get today's log entry
-    const todayLog = await new Promise((resolve, reject) => {
-      const sql = "SELECT * FROM logs WHERE USER = ? AND DATE(TIME) = ? LIMIT 1";
+    // Get today's logs (support multiple shifts per day)
+    const todayLogs = await new Promise((resolve, reject) => {
+      const sql = "SELECT * FROM logs WHERE USER = ? AND DATE(TIME) = ? ORDER BY ID DESC";
       db.query(sql, [username, today], (err, results) => {
         if (err) reject(err);
-        else resolve(results[0]);
+        else resolve(results || []);
       });
     });
 
-    // Calculate hardcoded status based on today's log TIME_IN and TIME_OUT
-    let calculatedStatus = 'Off Duty'; // Default status
-    
-    if (todayLog) {
-      if (todayLog.TIME_IN && !todayLog.TIME_OUT) {
-        // Has TIME_IN but no TIME_OUT = On Duty
-        calculatedStatus = 'On Duty';
-      } else if (todayLog.TIME_IN && todayLog.TIME_OUT) {
-        // Has both TIME_IN and TIME_OUT = Off Duty
-        calculatedStatus = 'Off Duty';
-      }
-    }
+    const latestLog = Array.isArray(todayLogs) && todayLogs.length > 0 ? todayLogs[0] : null;
+    const openLog = Array.isArray(todayLogs)
+      ? todayLogs.find((l) => l && l.TIME_IN && !l.TIME_OUT)
+      : null;
+
+    // Calculate status based on whether there is an open shift
+    const calculatedStatus = openLog ? 'On Duty' : 'Off Duty';
 
     // Format the schedule time for display
     let formattedScheduleDisplay = "No schedule assigned";
@@ -1835,22 +2228,29 @@ app.get("/api/user-time-status/:username", async (req, res) => {
         scheduledTime: formattedScheduleDisplay
       },
       logs: {
-        timeIn: todayLog?.TIME_IN ? {
-          time: todayLog.TIME_IN,
-          location: todayLog.LOCATION || 'Unknown Location',
-          action: 'TIME-IN'
+        timeIn: latestLog?.TIME_IN ? {
+          time: latestLog.TIME_IN,
+          location: latestLog.LOCATION || 'Unknown Location',
+          action: 'TIME-IN',
+          photo: uploadFilenameIfExists(latestLog.time_in_photo),
+          video: uploadFilenameIfExists(latestLog.time_in_video)
         } : null,
-        timeOut: todayLog?.TIME_OUT ? {
-          time: todayLog.TIME_OUT,
-          location: todayLog.LOCATION || 'Unknown Location',
-          action: 'TIME-OUT'
+        timeOut: latestLog?.TIME_OUT ? {
+          time: latestLog.TIME_OUT,
+          location: latestLog.LOCATION || 'Unknown Location',
+          action: 'TIME-OUT',
+          photo: uploadFilenameIfExists(latestLog.time_out_photo),
+          video: uploadFilenameIfExists(latestLog.time_out_video)
         } : null
       },
       currentTime: currentTime,
-      hasTimeInToday: !!todayLog?.TIME_IN,
-      hasTimeOutToday: !!todayLog?.TIME_OUT,
+      // Re-define these flags for multi-shift support:
+      // - hasTimeInToday => currently ON DUTY (has open shift)
+      // - hasTimeOutToday => latest shift ended
+      hasTimeInToday: !!openLog,
+      hasTimeOutToday: !!latestLog?.TIME_OUT,
       hasValidTime: hasValidScheduleToday(schedule), // Check if schedule is valid for today
-      mostRecentLogTime: todayLog?.TIME_OUT || todayLog?.TIME_IN || null, // From logs
+      mostRecentLogTime: latestLog?.TIME_OUT || latestLog?.TIME_IN || null, // From logs
       calculatedStatus: calculatedStatus // Hardcoded based on TIME_IN/TIME_OUT
     });
   } catch (error) {
@@ -1883,9 +2283,99 @@ app.post("/api/upload-time-photo", upload.single("photo"), (req, res) => {
   });
 });
 
+// NEW: Endpoint to handle time-in/time-out media uploads (photo OR video)
+// Use key "media" from FormData.
+app.post("/api/upload-time-media", upload.single("media"), (req, res) => {
+  if (!req.file) {
+    console.error("❌ Upload Error: No media received.");
+    return res.status(400).json({ success: false, message: "No media file was uploaded." });
+  }
+
+  const isVideoUpload = (() => {
+    const mime = String(req.file.mimetype || "").toLowerCase();
+    const ext = path.extname(req.file.originalname || req.file.filename || "").toLowerCase();
+    if (mime.startsWith("video/")) return true;
+    return [".mp4", ".mov", ".m4v", ".webm"].includes(ext);
+  })();
+
+  const uploadedPath = req.file.path; // e.g., uploads/<filename>
+  const uploadedFilename = req.file.filename;
+
+  const transcodeToMp4H264 = (inputPath) => {
+    return new Promise((resolve, reject) => {
+      if (!ffmpeg) return resolve(null);
+
+      const base = path.basename(inputPath, path.extname(inputPath));
+      const outputFilename = `${base}-h264.mp4`;
+      const outputPath = path.join(path.dirname(inputPath), outputFilename);
+
+      ffmpeg(inputPath)
+        .outputOptions([
+          "-c:v libx264",
+          "-pix_fmt yuv420p",
+          "-preset veryfast",
+          "-crf 28",
+          "-movflags +faststart",
+          "-c:a aac",
+          "-b:a 128k",
+        ])
+        .on("end", () => resolve({ outputFilename, outputPath }))
+        .on("error", (err) => reject(err))
+        .save(outputPath);
+    });
+  };
+
+  (async () => {
+    try {
+      // For photos, keep original behavior.
+      if (!isVideoUpload) {
+        console.log(`✅ Media uploaded successfully: ${uploadedFilename}`);
+        return res.json({ success: true, message: "Media uploaded successfully.", filename: uploadedFilename });
+      }
+
+      // For videos, transcode to a widely supported MP4 (H.264/AAC) for reliable playback.
+      const result = await transcodeToMp4H264(uploadedPath);
+      if (result?.outputFilename && result?.outputPath) {
+        // Remove original file to save space (best-effort).
+        try {
+          fs.unlinkSync(uploadedPath);
+        } catch {
+          // ignore
+        }
+
+        console.log(`✅ Video uploaded + transcoded: ${uploadedFilename} -> ${result.outputFilename}`);
+        return res.json({
+          success: true,
+          message: "Media uploaded successfully.",
+          filename: result.outputFilename,
+          transcoded: true,
+        });
+      }
+
+      // Fallback: no ffmpeg available; return original.
+      console.log(`✅ Video uploaded (no transcode): ${uploadedFilename}`);
+      return res.json({
+        success: true,
+        message: "Media uploaded successfully.",
+        filename: uploadedFilename,
+        transcoded: false,
+      });
+    } catch (err) {
+      console.error("❌ Video transcode failed; returning original file:", err?.message || err);
+      return res.json({
+        success: true,
+        message: "Media uploaded successfully (no transcode).",
+        filename: uploadedFilename,
+        transcoded: false,
+        transcodeError: String(err?.message || err),
+      });
+    }
+  })();
+});
+
 // Also modify the endpoint to not update schedule STATUS:
 app.post("/api/time-record", async (req, res) => {
-  const { user, action, photo } = req.body; // 1. Destructure the 'photo' from the request body
+  const { user, action, photo, video } = req.body; // Optional: photo/video filenames from uploads
   
   if (!user || !action) {
     return res.status(400).json({ 
@@ -1918,19 +2408,120 @@ app.post("/api/time-record", async (req, res) => {
           message: "Cannot time in without a valid schedule. Please contact your administrator." 
         });
       }
+
       const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       const now = new Date();
       const todayDayName = dayNames[now.getDay()];
       const currentMonthName = monthNames[now.getMonth()];
 
-      const isMonthMatch = schedule.MONTH === 'All' || schedule.MONTH.toLowerCase() === currentMonthName.toLowerCase();
-      const isDayMatch = schedule.DAY.toLowerCase() === todayDayName.toLowerCase();
+      const normalizeToken = (t) => String(t || "").trim().toLowerCase();
 
-      if (!isDayMatch || !isMonthMatch) {
+      const dayTokenToDayName = (token) => {
+        const t = normalizeToken(token);
+        if (!t) return null;
+
+        const full = {
+          sunday: "Sunday",
+          monday: "Monday",
+          tuesday: "Tuesday",
+          wednesday: "Wednesday",
+          thursday: "Thursday",
+          friday: "Friday",
+          saturday: "Saturday",
+        };
+        if (full[t]) return full[t];
+
+        const abbr3 = {
+          sun: "Sunday",
+          mon: "Monday",
+          tue: "Tuesday",
+          tues: "Tuesday",
+          wed: "Wednesday",
+          thu: "Thursday",
+          thur: "Thursday",
+          thurs: "Thursday",
+          fri: "Friday",
+          sat: "Saturday",
+        };
+        if (abbr3[t]) return abbr3[t];
+
+        const abbrShort = {
+          su: "Sunday",
+          mo: "Monday",
+          tu: "Tuesday",
+          we: "Wednesday",
+          th: "Thursday",
+          fr: "Friday",
+          sa: "Saturday",
+          s: "Sunday",
+          m: "Monday",
+          w: "Wednesday",
+          f: "Friday",
+        };
+        if (abbrShort[t]) return abbrShort[t];
+
+        return null;
+      };
+
+      const parseTimeToMinutes = (timeStr) => {
+        const raw = String(timeStr || "").trim();
+        if (!raw) return null;
+
+        const ampm = raw.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+        if (ampm) {
+          let h = Number(ampm[1]);
+          const m = Number(ampm[2]);
+          const mer = ampm[3].toLowerCase();
+          if (mer === "pm" && h !== 12) h += 12;
+          if (mer === "am" && h === 12) h = 0;
+          return h * 60 + m;
+        }
+
+        const parts = raw.split(":");
+        if (parts.length >= 2) {
+          const h = Number(parts[0]);
+          const m = Number(parts[1]);
+          if (Number.isFinite(h) && Number.isFinite(m)) {
+            return h * 60 + m;
+          }
+        }
+
+        return null;
+      };
+
+      const scheduleDays = String(schedule.DAY)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(dayTokenToDayName)
+        .filter(Boolean);
+
+      const isDayMatch = scheduleDays.length > 0
+        ? scheduleDays.some((d) => d.toLowerCase() === todayDayName.toLowerCase())
+        : normalizeToken(schedule.DAY) === todayDayName.toLowerCase();
+
+      const months = String(schedule.MONTH || "All")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const isMonthMatch = months.some((m) => normalizeToken(m) === "all")
+        || months.some((m) => normalizeToken(m) === currentMonthName.toLowerCase());
+
+      const startMin = parseTimeToMinutes(schedule.START_TIME);
+      const endMin = parseTimeToMinutes(schedule.END_TIME);
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const isWithinTime =
+        startMin == null || endMin == null
+          ? true
+          : startMin <= endMin
+            ? nowMin >= startMin && nowMin <= endMin
+            : nowMin >= startMin || nowMin <= endMin;
+
+      if (!isDayMatch || !isMonthMatch || !isWithinTime) {
         return res.status(400).json({
-          success: false, 
-          message: "Cannot time in without a valid schedule. Please contact your administrator." 
+          success: false,
+          message: "Cannot time in without a valid schedule. Please contact your administrator.",
         });
       }
     } catch (error) {
@@ -1944,34 +2535,52 @@ app.post("/api/time-record", async (req, res) => {
   const currentTime = getGMT8Time();
   try {
     const today = currentTime.slice(0, 10);
+
+    const uploadFilenameIfExists = (maybeFilename) => {
+      const filename = typeof maybeFilename === 'string' ? maybeFilename.trim() : '';
+      if (!filename) return null;
+      try {
+        const fullPath = path.join(__dirname, 'uploads', filename);
+        return fs.existsSync(fullPath) ? filename : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const safePhoto = uploadFilenameIfExists(photo);
+    const safeVideo = uploadFilenameIfExists(video);
     
     // Determine the new status and action based on the time record action
     const newStatus = action === 'TIME-IN' ? 'On Duty' : 'Off Duty';
     const logAction = action === 'TIME-IN' ? 'On Duty' : 'COMPLETED'; // Set logs ACTION to COMPLETED for TIME-OUT
     
-    const existingLog = await new Promise((resolve, reject) => {
-      const sql = "SELECT * FROM logs WHERE USER = ? AND DATE(TIME) = ? LIMIT 1";
-      db.query(sql, [user, today], (err, results) => {
-        if (err) reject(err);
-        else resolve(results[0]);
+    if (action === 'TIME-IN') {
+      // Prevent starting a new shift if there is already an open shift today.
+      const openShift = await new Promise((resolve, reject) => {
+        const sql = "SELECT * FROM logs WHERE USER = ? AND DATE(TIME) = ? AND TIME_IN IS NOT NULL AND (TIME_OUT IS NULL OR TIME_OUT = '') ORDER BY ID DESC LIMIT 1";
+        db.query(sql, [user, today], (err, results) => {
+          if (err) reject(err);
+          else resolve(results[0]);
+        });
       });
-    });
 
-    if (existingLog) {
-      // Update existing log with ACTION matching the new status
-      // 2. Add the photo column to the UPDATE query
-      const photoColumn = action === 'TIME-IN' ? 'time_in_photo' : 'time_out_photo';
-      const updateSql = `
-        UPDATE logs 
-        SET ${action === 'TIME-IN' ? 'TIME_IN = ?' : 'TIME_OUT = ?'}, ACTION = ?, ${photoColumn} = ?
-        WHERE USER = ? AND DATE(TIME) = ?
+      if (openShift) {
+        return res.status(400).json({
+          success: false,
+          message: "You are already on duty. Please time out first.",
+        });
+      }
+
+      // Start a NEW log row for this shift.
+      const insertSql = `
+        INSERT INTO logs (USER, TIME, TIME_IN, ACTION, time_in_photo, time_in_video)
+        VALUES (?, ?, ?, ?, ?, ?)
       `;
-      
+
       await new Promise((resolve, reject) => {
         db.query(
-          updateSql, 
-          // 3. Add the photo filename to the query parameters
-          [currentTime, logAction, photo, user, today],
+          insertSql,
+          [user, currentTime, currentTime, logAction, safePhoto, safeVideo],
           (err, result) => {
             if (err) reject(err);
             else resolve(result);
@@ -1979,19 +2588,32 @@ app.post("/api/time-record", async (req, res) => {
         );
       });
     } else {
-      // Insert new log with ACTION matching the new status
-      // 4. Add the photo column to the INSERT query
-      const photoColumn = action === 'TIME-IN' ? 'time_in_photo' : 'time_out_photo';
-      const insertSql = `
-        INSERT INTO logs (USER, TIME, ${action === 'TIME-IN' ? 'TIME_IN' : 'TIME_OUT'}, ACTION, ${photoColumn})
-        VALUES (?, ?, ?, ?, ?)
+      // TIME-OUT: close the most recent open shift.
+      const openShift = await new Promise((resolve, reject) => {
+        const sql = "SELECT * FROM logs WHERE USER = ? AND DATE(TIME) = ? AND TIME_IN IS NOT NULL AND (TIME_OUT IS NULL OR TIME_OUT = '') ORDER BY ID DESC LIMIT 1";
+        db.query(sql, [user, today], (err, results) => {
+          if (err) reject(err);
+          else resolve(results[0]);
+        });
+      });
+
+      if (!openShift) {
+        return res.status(400).json({
+          success: false,
+          message: "You need to time in first before you can end your shift.",
+        });
+      }
+
+      const updateSql = `
+        UPDATE logs
+        SET TIME_OUT = ?, ACTION = ?, time_out_photo = ?, time_out_video = ?
+        WHERE ID = ?
       `;
-      
+
       await new Promise((resolve, reject) => {
         db.query(
-          insertSql, 
-          // 5. Add the photo filename to the query parameters
-          [user, currentTime, currentTime, logAction, photo],
+          updateSql,
+          [currentTime, logAction, safePhoto, safeVideo, openShift.ID],
           (err, result) => {
             if (err) reject(err);
             else resolve(result);
@@ -2701,8 +3323,8 @@ app.post("/api/incident_types", (req, res) => {
   });
 });
 
-// --- Multer Configuration for Resolution Image Uploads ---
-// This sets up a specific storage location for resolution images.
+// --- Multer Configuration for Resolution Proof Uploads (image/video) ---
+// Stores proof files (photo or video) under uploads/resolutions/
 const resolutionStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     // The directory is 'uploads/resolutions/'
@@ -2715,21 +3337,47 @@ const resolutionStorage = multer.diskStorage({
   }
 });
 
-const uploadResolution = multer({ storage: resolutionStorage });
+const uploadResolution = multer({
+  storage: resolutionStorage,
+  limits: {
+    // Videos can be larger; adjust if needed.
+    fileSize: 50 * 1024 * 1024, // 50MB
+  },
+  fileFilter: (req, file, cb) => {
+    const ok = Boolean(file.mimetype) && (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/'));
+    if (!ok) {
+      return cb(new Error('Only image/* or video/* files are allowed for resolution proof'));
+    }
+    cb(null, true);
+  },
+});
 
-// NEW ENDPOINT: Resolve a patrol log incident with photo proof
-app.post("/api/patrol-logs/resolve", uploadResolution.single("resolutionImage"), (req, res) => {
+// NEW ENDPOINT: Resolve a patrol log incident with proof (photo or video)
+// Backward compatible: accepts field name "resolutionImage" and new "resolutionMedia".
+app.post(
+  "/api/patrol-logs/resolve",
+  uploadResolution.fields([
+    { name: "resolutionImage", maxCount: 1 },
+    { name: "resolutionMedia", maxCount: 1 },
+  ]),
+  (req, res) => {
   const { logId, resolved_by } = req.body;
   console.log(`🔍 Received resolution request for logId: ${logId}, resolved_by: ${resolved_by}`);
 
-  // Check if a file was uploaded
-  if (!req.file) {
-    console.error("❌ Resolve Error: No image file was received.");
-    return res.status(400).json({ success: false, message: 'Resolution image is required.' });
-  }
-  console.log(`🔍 Image file received: ${req.file.filename}`);
+  const fileFromFields = (req.files && (req.files.resolutionMedia || req.files.resolutionImage))
+    ? (req.files.resolutionMedia || req.files.resolutionImage)[0]
+    : null;
 
-  const resolution_image_path = req.file.filename;
+  // Check if a file was uploaded
+  if (!fileFromFields) {
+    console.error("❌ Resolve Error: No proof file was received.");
+    return res.status(400).json({ success: false, message: 'Resolution proof file (photo or video) is required.' });
+  }
+
+  console.log(`🔍 Proof file received: ${fileFromFields.filename} (${fileFromFields.mimetype})`);
+
+  // Keep column name for compatibility; it now may point to a photo or video.
+  const resolution_image_path = fileFromFields.filename;
   const resolved_at_time = getGMT8Time();
 
   // First, check if the patrol log exists and get the incident_id

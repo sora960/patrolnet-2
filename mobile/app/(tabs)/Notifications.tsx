@@ -403,8 +403,8 @@ const Notifications: React.FC = () => {
     }
   };
 
-  // Function to resolve a patrol log incident with photo proof
-  const resolvePatrolLog = async (logId: number, imageUri: string) => {
+  // Function to resolve a patrol log incident with proof (photo or video)
+  const resolvePatrolLog = async (logId: number, mediaUri: string) => {
     if (!username) {
       Alert.alert("Error", "Username not found. Cannot resolve incident.");
       return;
@@ -415,15 +415,17 @@ const Notifications: React.FC = () => {
       formData.append('logId', logId.toString());
       formData.append('resolved_by', username);
 
-      // Prepare image for upload
-      const filename = imageUri.split('/').pop()!;
+      // Prepare media for upload
+      const filename = mediaUri.split('/').pop()!;
       const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image`;
+      const ext = match ? match[1].toLowerCase() : '';
+      const isVideo = ['mp4', 'mov', 'm4v', 'webm', '3gp', 'mkv', 'avi'].includes(ext);
+      const type = ext ? `${isVideo ? 'video' : 'image'}/${ext}` : (isVideo ? 'video/*' : 'image/*');
 
       // The 'any' type is used here because the standard FormData type definition
       // in TypeScript doesn't perfectly match React Native's structure for file uploads.
-      formData.append('resolutionImage', {
-        uri: imageUri,
+      formData.append('resolutionMedia', {
+        uri: mediaUri,
         name: filename,
         type,
       } as any);

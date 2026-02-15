@@ -1,6 +1,6 @@
 // Home.tsx
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform,Image, ScrollView} from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image, ScrollView } from "react-native";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import axios from 'axios';
@@ -25,7 +25,39 @@ interface UserData {
   IMAGE?: string | null;
 }
 
-const Home: React.FC = () => {
+class ScreenErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message?: string }
+> {
+  state = { hasError: false as boolean, message: undefined as string | undefined };
+
+  static getDerivedStateFromError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { hasError: true, message };
+  }
+
+  componentDidCatch(error: unknown, info: unknown) {
+    console.error("Home screen render error:", error);
+    console.error("Component stack:", info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={[styles.container, { justifyContent: "center", padding: 20 }]}>
+          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 8 }}>
+            Something went wrong rendering this screen.
+          </Text>
+          <Text style={{ color: "#475569" }}>{this.state.message}</Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const HomeInner: React.FC = () => {
   const route = useRoute<HomeRouteProp>();
   const navigation = useNavigation<NavigationProp>();
   const username = route.params?.username || "";
@@ -95,106 +127,124 @@ const Home: React.FC = () => {
   };
   
   return (
-     <View style={styles.container}>
-        {/* Temporary hidden Text component to address BASE_URL warning */}
-        <Text style={{ display: 'none' }}>{BASE_URL}</Text>
+    <View style={styles.container}>
+      {
+        // Render as an explicit array to avoid any whitespace-only text nodes inside <View>
+        [
+          // Temporary hidden Text component to address BASE_URL warning
+          <Text key="base_url" style={{ display: "none" }}>
+            {BASE_URL}
+          </Text>,
+          <NavBar
+            key="navbar"
+            username={username}
+            userImage={userData?.IMAGE}
+            userRole={userData?.ROLE}
+          />,
+          <ScrollView
+            key="scroll"
+            contentContainerStyle={styles.body}
+            showsVerticalScrollIndicator={false}
+          >
+            {
+              // Render children as an explicit array to avoid whitespace-only text nodes inside <ScrollView>
+              [
+                <View key="logo" style={styles.logoContainer}>
+                  <Image
+                    source={require("./new-icon.png")}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.title}>PatrolNet</Text>
+                  <Text style={styles.tagline}>Community Safety Network</Text>
+                </View>,
+                <View key="desc" style={styles.descriptionCard}>
+                  <Text style={styles.descriptionTitle}>About PatrolNet</Text>
+                  <Text style={styles.descriptionText}>
+                    PatrolNet connects residents with local authorities and emergency services.
+                    Report incidents quickly, access emergency contacts instantly, and help keep
+                    your community safe through our secure platform.
+                  </Text>
 
-        <NavBar 
-      username={username} 
-      userImage={userData?.IMAGE} 
-      userRole={userData?.ROLE}  // Add this line
-        />
-
-    <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-
-      
-<View style={styles.logoContainer}>
-  <Image
-    source={require('./new-icon.png')} // <-- Replace with your logo path
-    style={styles.logoImage}
-    resizeMode="contain"
-  />
-  <Text style={styles.title}>PatrolNet</Text>
-  <Text style={styles.tagline}>Community Safety Network</Text>
-</View>
-      
-      <View style={styles.descriptionCard}>
-        <Text style={styles.descriptionTitle}>About PatrolNet</Text>
-        <Text style={styles.descriptionText}>
-          PatrolNet connects residents with local authorities and emergency services. 
-          Report incidents quickly, access emergency contacts instantly, and help keep 
-          your community safe through our secure platform.
-        </Text>
-        
-        <View style={styles.featuresRow}>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>🚨</Text>
-            <Text style={styles.featureText}>Quick Reports</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>📞</Text>
-            <Text style={styles.featureText}>Emergency Access</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>🔒</Text>
-            <Text style={styles.featureText}>Secure & Private</Text>
-          </View>
-        </View>
-      </View>
-      
-      {userData?.ROLE === "Tanod" ? (
-        <TouchableOpacity
-          style={styles.reportButton} // Reusing reportButton style for now
-          onPress={() => navigation.navigate("TimeIn", { username })} // Navigate to TimeIn for Tanod
-          activeOpacity={0.8}
-        >
-          <View style={styles.buttonContent}>
-            <Text style={styles.buttonIcon}>⏰</Text> {/* Clock emoji for attendance */}
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.reportButtonText}>ATTENDANCE</Text>
-              <Text style={styles.buttonSubtext}>Manage your shifts</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={styles.reportButton}
-          onPress={() => navigation.navigate("IncidentReport", { username })}
-          activeOpacity={0.8}
-        >
-          <View style={styles.buttonContent}>
-            <Text style={styles.buttonIcon}>📋</Text>
-            <View style={styles.buttonTextContainer}>
-              <Text style={styles.reportButtonText}>REPORT INCIDENT</Text>
-              <Text style={styles.buttonSubtext}>Document safety concerns</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
-
-      <TouchableOpacity
-        style={styles.emergencyButton}
-        onPress={makeEmergencyCall}
-        activeOpacity={0.8}
-      >
-        <View style={styles.buttonContent}>
-          <Text style={styles.emergencyIcon}>🚨</Text>
-          <View style={styles.buttonTextContainer}>
-            <Text style={styles.emergencyButtonText}>EMERGENCY CALL</Text>
-            <Text style={styles.emergencySubtext}>Immediate assistance</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      <View style={styles.statusContainer}>
-        <View style={styles.statusDot} />
-        <Text style={styles.offlineText}>Connected via localhost</Text>
-      </View>
-    </ScrollView>
-  </View>
+                  <View style={styles.featuresRow}>
+                    <View style={styles.featureItem}>
+                      <Text style={styles.featureIcon}>🚨</Text>
+                      <Text style={styles.featureText}>Quick Reports</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Text style={styles.featureIcon}>📞</Text>
+                      <Text style={styles.featureText}>Emergency Access</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Text style={styles.featureIcon}>🔒</Text>
+                      <Text style={styles.featureText}>Secure & Private</Text>
+                    </View>
+                  </View>
+                </View>,
+                userData?.ROLE === "Tanod" ? (
+                  <TouchableOpacity
+                    key="attendance"
+                    style={styles.reportButton}
+                    onPress={() => navigation.navigate("TimeIn", { username })}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.buttonContent}>
+                      <Text style={styles.buttonIcon}>⏰</Text>
+                      <View style={styles.buttonTextContainer}>
+                        <Text style={styles.reportButtonText}>ATTENDANCE</Text>
+                        <Text style={styles.buttonSubtext}>Manage your shifts</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    key="report"
+                    style={styles.reportButton}
+                    onPress={() => navigation.navigate("IncidentReport", { username })}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.buttonContent}>
+                      <Text style={styles.buttonIcon}>📋</Text>
+                      <View style={styles.buttonTextContainer}>
+                        <Text style={styles.reportButtonText}>REPORT INCIDENT</Text>
+                        <Text style={styles.buttonSubtext}>Document safety concerns</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ),
+                <TouchableOpacity
+                  key="emergency"
+                  style={styles.emergencyButton}
+                  onPress={makeEmergencyCall}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.buttonContent}>
+                    <Text style={styles.emergencyIcon}>🚨</Text>
+                    <View style={styles.buttonTextContainer}>
+                      <Text style={styles.emergencyButtonText}>EMERGENCY CALL</Text>
+                      <Text style={styles.emergencySubtext}>Immediate assistance</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>,
+                <View key="status" style={styles.statusContainer}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.offlineText}>Connected via localhost</Text>
+                </View>,
+              ]
+            }
+          </ScrollView>,
+        ]
+      }
+    </View>
 
   );
 };
+
+const Home: React.FC = () => (
+  <ScreenErrorBoundary>
+    <HomeInner />
+  </ScreenErrorBoundary>
+);
 
 const styles = StyleSheet.create({
    container: { 

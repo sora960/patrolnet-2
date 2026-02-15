@@ -485,17 +485,30 @@ function ViewIncidentModal({
                 <div className="modal-field">
                   <label>Resolution Proof</label>
                   <div className="modal-image-container">
-                    <img
-                      src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
-                      alt="Resolution proof"
-                      className="modal-image"
-                      onClick={() => handleImageClick(`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`)}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.parentNode.innerHTML = '<div class="image-placeholder">Resolution photo not available</div>';
-                      }}
-                      title="Click to view full size"
-                    />
+                    {/\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i.test(selectedIncident.resolution_image_path) ? (
+                      <video
+                        src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
+                        className="modal-image"
+                        controls
+                        playsInline
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentNode.innerHTML = '<div class="image-placeholder">Resolution video not available</div>';
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
+                        alt="Resolution proof"
+                        className="modal-image"
+                        onClick={() => handleImageClick(`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`)}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentNode.innerHTML = '<div class="image-placeholder">Resolution photo not available</div>';
+                        }}
+                        title="Click to view full size"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

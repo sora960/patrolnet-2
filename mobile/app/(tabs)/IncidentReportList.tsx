@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -6,15 +6,26 @@ import axios from 'axios';
 import { BASE_URL } from '../../config'; // Assuming BASE_URL is defined here
 import type { RootStackParamList } from "./app";
 
-// Define the Incident interface based on the required columns
+type ApiIncident = {
+  id: string | number;
+  incident_type?: string | null;
+  location?: string | null;
+  status?: string | null;
+  datetime?: string | null;
+  image?: string | null;
+  reported_by?: string | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+};
+
+// UI model used by this table
 interface Incident {
   ID: string;
-  Incident: string; // Assuming this is the incident name/title
+  Incident: string;
   Type: string;
-  ReportedBy: string; // Changed from 'Reported By' to 'ReportedBy' for property naming
+  ReportedBy: string;
   Location: string;
   Status: string;
-  // Actions will be a UI element, not a data property
 }
 
 type IncidentReportListRouteProp = RouteProp<RootStackParamList, "IncidentReportList">;
@@ -28,26 +39,62 @@ const IncidentReportList: React.FC = () => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetchIncidents();
+
+    // Poll periodically so the list updates "dynamically" when new incidents are added.
+    pollTimerRef.current = setInterval(() => {
+      fetchIncidents(true);
+    }, 10000);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    };
   }, []);
 
-  const fetchIncidents = async () => {
+  const mapApiIncidentToRow = (apiIncident: ApiIncident): Incident => {
+    const id = apiIncident.id ?? '';
+    return {
+      ID: String(id),
+      Incident: apiIncident.incident_type ?? 'Incident',
+      Type: apiIncident.incident_type ?? '',
+      ReportedBy: apiIncident.reported_by ?? '',
+      Location: apiIncident.location ?? '',
+      Status: apiIncident.status ?? '',
+    };
+  };
+
+  const fetchIncidents = useCallback(async (silent: boolean = false) => {
     try {
-      setLoading(true);
-      // Assuming an API endpoint to fetch all incidents
-      const response = await axios.get(`${BASE_URL}/api/incidents`);
-      console.log("API Response Data:", response.data); // Log the response data
-      setIncidents(response.data);
+      if (!silent) setLoading(true);
+      setError(null);
+
+      const response = await axios.get<ApiIncident[]>(`${BASE_URL}/api/incidents`);
+      const apiIncidents = Array.isArray(response.data) ? response.data : [];
+      setIncidents(apiIncidents.map(mapApiIncidentToRow));
     } catch (err) {
       console.error("Error fetching incidents:", err);
       setError("Failed to load incidents. Please try again later.");
-      Alert.alert("Error", "Failed to load incidents. Please try again later.");
+      if (!silent) {
+        Alert.alert("Error", "Failed to load incidents. Please try again later.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      await fetchIncidents(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchIncidents]);
 
   const handleViewDetails = (incidentId: string) => {
     // Navigate to a detailed incident view, passing the incident ID
@@ -57,7 +104,6 @@ const IncidentReportList: React.FC = () => {
   };
 
   const renderIncidentItem = ({ item }: { item: Incident }) => {
-    console.log("Rendering item:", item); // Log each item being rendered
     return (
       <View style={styles.row}>
         <Text style={[styles.cell, styles.idCell]}>{item.ID}</Text>
@@ -111,6 +157,8 @@ const IncidentReportList: React.FC = () => {
         data={incidents}
         keyExtractor={(item, index) => (item.ID ? item.ID.toString() : index.toString())}
         renderItem={renderIncidentItem}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         ListEmptyComponent={<Text style={styles.emptyListText}>No incident reports found.</Text>}
       />
     </View>

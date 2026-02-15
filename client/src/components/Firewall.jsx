@@ -112,7 +112,7 @@ const Firewall = () => {
       <div className="firewall-header">
         <h1 className="firewall-title">
           <Shield size={28} className="firewall-title-icon" />
-          Firewall Management
+          IP Management
         </h1>
         <p className="firewall-subtitle">Monitor and manage network access by blocking specific IP addresses.</p>
       </div>

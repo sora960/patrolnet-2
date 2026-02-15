@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   Platform,
+  Linking,
 } from "react-native";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,26 +23,44 @@ type TimeInRouteProp = RouteProp<RootStackParamList, "TimeIn">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, "TimeIn">;
 
 interface UserTimeStatus {
-  schedule: {
-    id: number;
-    user: string;
-    status: string;
-    scheduledTime: string | null;
-  };
-  logs: {
-    timeIn: {
-      time: string;
-      action: string;
-    } | null;
-    timeOut: {
-      time: string;
-      action: string;
-    } | null;
-  };
+  success?: boolean;
+  schedule:
+    | {
+        id: number;
+        user: string;
+        status: string;
+        location?: string | null;
+        scheduledTime: string | null;
+      }
+    | null;
+  logs:
+    | {
+        timeIn:
+          | {
+              time: string;
+              action: string;
+              location?: string;
+              photo?: string | null;
+              video?: string | null;
+            }
+          | null;
+        timeOut:
+          | {
+              time: string;
+              action: string;
+              location?: string;
+              photo?: string | null;
+              video?: string | null;
+            }
+          | null;
+      }
+    | null;
   currentTime: string;
   hasTimeInToday: boolean;
   hasValidTime: boolean;
   hasTimeOutToday: boolean;
+  mostRecentLogTime?: string | null;
+  calculatedStatus?: string;
 }
 
 const TanodAttendance: React.FC = () => {
@@ -128,7 +147,10 @@ const TanodAttendance: React.FC = () => {
   };
 
   // Original time-record call (kept for compatibility)
-  const handleTimeRecord = async (action: "TIME-IN" | "TIME-OUT", extra?: { photo?: string }) => {
+  const handleTimeRecord = async (
+    action: "TIME-IN" | "TIME-OUT",
+    extra?: { photo?: string; video?: string }
+  ) => {
     if (submitting) return;
 
     // Validation checks
@@ -155,6 +177,7 @@ const TanodAttendance: React.FC = () => {
         action,
       };
       if (extra?.photo) bodyPayload.photo = extra.photo;
+      if (extra?.video) bodyPayload.video = extra.video;
 
       const response = await fetch(`${BASE_URL}/api/time-record`, {
         method: "POST",
@@ -224,6 +247,55 @@ const TanodAttendance: React.FC = () => {
     }
   };
 
+  // NEW: Launch camera to capture short video
+  const openVideoCamera = async (): Promise<string | null> => {
+    try {
+      if (Platform.OS !== "web") {
+        const granted = await requestCameraPermission();
+        if (!granted) {
+          Alert.alert("Permission Needed", "Camera access is required to record a video.");
+          return null;
+        }
+      }
+
+      // NOTE: Some Android devices/ROMs + Expo Go can fail with
+      // "Failed to extract metadata from video file" even though the file is created.
+      // Keep options minimal and iOS-specific options gated.
+      const pickerOptions: any = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        videoMaxDuration: 30,
+      };
+
+      if (Platform.OS === "ios") {
+        pickerOptions.videoQuality = ImagePicker.UIImagePickerControllerQualityType.Medium;
+      }
+
+      const result = await ImagePicker.launchCameraAsync(pickerOptions);
+
+      const uri = (result as any).assets?.[0]?.uri ?? (result as any).uri ?? null;
+      if (!uri || (result as any).cancelled === true || (result as any).canceled === true) {
+        return null;
+      }
+
+      return uri;
+    } catch (error) {
+      const message = String((error as any)?.message ?? error);
+
+      // Recovery: expo-image-picker may throw after recording if metadata extraction fails.
+      // The recorded file URI is often embedded in the error message; we can still upload it.
+      const uriMatch = message.match(/(file:\/\/\/[^\s'\"]+\.(mp4|mov|m4v|webm))/i);
+      if (uriMatch?.[1]) {
+        console.warn("Video picker metadata failed; using captured file anyway:", uriMatch[1]);
+        return uriMatch[1];
+      }
+
+      console.warn("Video camera error:", message);
+      Alert.alert("Error", "Could not record video.");
+      return null;
+    }
+  };
+
   // NEW: Upload photo to server - returns filename or null
   const uploadPhoto = async (uri: string, action: "TIME-IN" | "TIME-OUT") => {
     try {
@@ -264,6 +336,70 @@ const TanodAttendance: React.FC = () => {
     }
   };
 
+  // NEW: Upload photo OR video to server - returns filename or null
+  const uploadMedia = async (
+    uri: string,
+    action: "TIME-IN" | "TIME-OUT",
+    kind: "photo" | "video" = "photo"
+  ) => {
+    try {
+      const formData = new FormData();
+
+      const videoExts = ["mp4", "mov", "m4v", "webm"];
+
+      let filename = uri.split("/").pop() || `${username}_${Date.now()}`;
+      const match = /\.(\w+)$/.exec(filename);
+      let ext = (match ? match[1] : "").toLowerCase();
+
+      const isVideo = kind === "video" || videoExts.includes(ext);
+      if (isVideo && !videoExts.includes(ext)) {
+        filename = `${filename}.mp4`;
+        ext = "mp4";
+      }
+      if (!isVideo && !ext) {
+        filename = `${filename}.jpg`;
+        ext = "jpg";
+      }
+
+      const mimeType = isVideo
+        ? ext === "mov"
+          ? "video/quicktime"
+          : ext === "webm"
+            ? "video/webm"
+            : "video/mp4"
+        : ext === "png"
+          ? "image/png"
+          : "image/jpeg";
+
+      // @ts-ignore - FormData append with file object
+      formData.append("media", {
+        uri,
+        name: filename,
+        type: mimeType,
+      });
+      formData.append("username", username);
+      formData.append("action", action);
+
+      const resp = await fetch(`${BASE_URL}/api/upload-time-media`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        return data.filename || data.file || filename;
+      }
+
+      console.error("Upload media failed response:", data);
+      Alert.alert("Upload Failed", data.message || "Could not upload media.");
+      return null;
+    } catch (error) {
+      console.error("Upload media error:", error);
+      Alert.alert("Upload Error", "Failed to upload media. Check your connection.");
+      return null;
+    }
+  };
+
   // NEW: Flow — user taps START SHIFT -> show confirm -> on Confirm open camera -> upload -> record
   const handleTimeInPress = async () => {
     if (submitting) return;
@@ -287,24 +423,53 @@ const TanodAttendance: React.FC = () => {
           text: "Confirm",
           style: "default",
           onPress: async () => {
-            // After confirming, open camera
-            const uri = await openCamera();
-            if (!uri) {
-              Alert.alert("Cancelled", "You must take a picture before timing in.");
-              return;
-            }
+            Alert.alert(
+              "Attach Evidence",
+              "Choose what to attach for your attendance.",
+              [
+                {
+                  text: "Video (recommended)",
+                  onPress: async () => {
+                    const uri = await openVideoCamera();
+                    if (!uri) {
+                      Alert.alert("Cancelled", "You must record a video before timing in.");
+                      return;
+                    }
 
-            setSubmitting(true);
-            const uploadedFilename = await uploadPhoto(uri, "TIME-IN");
-            if (!uploadedFilename) {
-              setSubmitting(false);
-              return;
-            }
+                    setSubmitting(true);
+                    const uploadedFilename = await uploadMedia(uri, "TIME-IN", "video");
+                    if (!uploadedFilename) {
+                      setSubmitting(false);
+                      return;
+                    }
 
-            // After successful upload, record time with photo filename
-            await handleTimeRecord("TIME-IN", { photo: uploadedFilename });
-            // handleTimeRecord will call fetchUserTimeStatus on success via the OK button press
-            setSubmitting(false);
+                    await handleTimeRecord("TIME-IN", { video: uploadedFilename });
+                    setSubmitting(false);
+                  },
+                },
+                {
+                  text: "Photo",
+                  onPress: async () => {
+                    const uri = await openCamera();
+                    if (!uri) {
+                      Alert.alert("Cancelled", "You must take a picture before timing in.");
+                      return;
+                    }
+
+                    setSubmitting(true);
+                    const uploadedFilename = await uploadPhoto(uri, "TIME-IN");
+                    if (!uploadedFilename) {
+                      setSubmitting(false);
+                      return;
+                    }
+
+                    await handleTimeRecord("TIME-IN", { photo: uploadedFilename });
+                    setSubmitting(false);
+                  },
+                },
+                { text: "Cancel", style: "cancel" },
+              ]
+            );
           },
         },
       ]
@@ -339,23 +504,53 @@ const TanodAttendance: React.FC = () => {
           text: "Confirm",
           style: "default",
           onPress: async () => {
-            // After confirming, open camera
-            const uri = await openCamera();
-            if (!uri) {
-              Alert.alert("Cancelled", "You must take a picture before timing out.");
-              return;
-            }
+            Alert.alert(
+              "Attach Evidence",
+              "Choose what to attach for your attendance.",
+              [
+                {
+                  text: "Video (recommended)",
+                  onPress: async () => {
+                    const uri = await openVideoCamera();
+                    if (!uri) {
+                      Alert.alert("Cancelled", "You must record a video before timing out.");
+                      return;
+                    }
 
-            setSubmitting(true);
-            const uploadedFilename = await uploadPhoto(uri, "TIME-OUT");
-            if (!uploadedFilename) {
-              setSubmitting(false);
-              return;
-            }
+                    setSubmitting(true);
+                    const uploadedFilename = await uploadMedia(uri, "TIME-OUT", "video");
+                    if (!uploadedFilename) {
+                      setSubmitting(false);
+                      return;
+                    }
 
-            // After successful upload, record time with photo filename
-            await handleTimeRecord("TIME-OUT", { photo: uploadedFilename });
-            setSubmitting(false);
+                    await handleTimeRecord("TIME-OUT", { video: uploadedFilename });
+                    setSubmitting(false);
+                  },
+                },
+                {
+                  text: "Photo",
+                  onPress: async () => {
+                    const uri = await openCamera();
+                    if (!uri) {
+                      Alert.alert("Cancelled", "You must take a picture before timing out.");
+                      return;
+                    }
+
+                    setSubmitting(true);
+                    const uploadedFilename = await uploadPhoto(uri, "TIME-OUT");
+                    if (!uploadedFilename) {
+                      setSubmitting(false);
+                      return;
+                    }
+
+                    await handleTimeRecord("TIME-OUT", { photo: uploadedFilename });
+                    setSubmitting(false);
+                  },
+                },
+                { text: "Cancel", style: "cancel" },
+              ]
+            );
           },
         },
       ]
@@ -381,6 +576,21 @@ const TanodAttendance: React.FC = () => {
       });
     } catch (error) {
       return "Invalid time";
+    }
+  };
+
+  const openEvidence = async (filename: string) => {
+    const url = `${BASE_URL}/uploads/${encodeURIComponent(filename)}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert("Cannot Open", "Unable to open the evidence link on this device.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error("Open evidence error:", error);
+      Alert.alert("Error", "Failed to open evidence.");
     }
   };
 
@@ -412,9 +622,33 @@ const TanodAttendance: React.FC = () => {
     }
   };
 
-  const canTimeIn = !userStatus?.hasTimeInToday && !!userStatus?.hasValidTime;
-  const canTimeOut = userStatus?.hasTimeInToday && !userStatus?.hasTimeOutToday;
+  // Server flags:
+  // - hasTimeInToday => currently ON DUTY (open shift)
+  // - hasTimeOutToday => latest shift ended
+  const isOnDuty = !!userStatus?.hasTimeInToday;
+  const isShiftEnded = !!userStatus?.hasTimeOutToday && !isOnDuty;
+  const hasValidSchedule = !!userStatus?.hasValidTime;
+
+  // Allow multiple shifts per day: user can TIME-IN again if not currently on duty and schedule is valid.
+  const canTimeIn = !isOnDuty && hasValidSchedule;
+  const canTimeOut = isOnDuty;
   const statusInfo = getStatusInfo();
+
+  const timeInUi = (() => {
+    if (submitting) {
+      return { icon: "enter-outline" as const, title: "START SHIFT", sub: "Submitting..." };
+    }
+    if (isOnDuty) {
+      return { icon: "checkmark-circle" as const, title: "ALREADY ON DUTY", sub: "Shift has started" };
+    }
+    if (isShiftEnded) {
+      return { icon: "checkmark-circle" as const, title: "SHIFT ENDED", sub: "Duty completed" };
+    }
+    if (!hasValidSchedule) {
+      return { icon: "close-circle" as const, title: "NOT SCHEDULED", sub: "No valid schedule today" };
+    }
+    return { icon: "enter-outline" as const, title: "START SHIFT", sub: "Tap to begin your duty" };
+  })();
 
   if (loading) {
     return (
@@ -495,6 +729,30 @@ const TanodAttendance: React.FC = () => {
                 <View style={styles.recordDetails}>
                   <Text style={styles.recordAction}>TIME IN</Text>
                   <Text style={styles.recordTime}>{formatLogTime(userStatus.logs.timeIn.time)}</Text>
+                  {(userStatus.logs.timeIn.video || userStatus.logs.timeIn.photo) && (
+                    <View style={styles.evidenceRow}>
+                      {userStatus.logs.timeIn.video && (
+                        <TouchableOpacity
+                          style={styles.evidencePill}
+                          onPress={() => openEvidence(userStatus.logs.timeIn!.video!)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="play-circle-outline" size={16} color="#0f172a" />
+                          <Text style={styles.evidenceText}>Play Video</Text>
+                        </TouchableOpacity>
+                      )}
+                      {userStatus.logs.timeIn.photo && (
+                        <TouchableOpacity
+                          style={styles.evidencePill}
+                          onPress={() => openEvidence(userStatus.logs.timeIn!.photo!)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="image-outline" size={16} color="#0f172a" />
+                          <Text style={styles.evidenceText}>View Photo</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </View>
                 <Ionicons name="checkmark-circle" size={20} color="#28a745" />
               </View>
@@ -508,6 +766,30 @@ const TanodAttendance: React.FC = () => {
                 <View style={styles.recordDetails}>
                   <Text style={styles.recordAction}>TIME OUT</Text>
                   <Text style={styles.recordTime}>{formatLogTime(userStatus.logs.timeOut.time)}</Text>
+                  {(userStatus.logs.timeOut.video || userStatus.logs.timeOut.photo) && (
+                    <View style={styles.evidenceRow}>
+                      {userStatus.logs.timeOut.video && (
+                        <TouchableOpacity
+                          style={styles.evidencePill}
+                          onPress={() => openEvidence(userStatus.logs.timeOut!.video!)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="play-circle-outline" size={16} color="#0f172a" />
+                          <Text style={styles.evidenceText}>Play Video</Text>
+                        </TouchableOpacity>
+                      )}
+                      {userStatus.logs.timeOut.photo && (
+                        <TouchableOpacity
+                          style={styles.evidencePill}
+                          onPress={() => openEvidence(userStatus.logs.timeOut!.photo!)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="image-outline" size={16} color="#0f172a" />
+                          <Text style={styles.evidenceText}>View Photo</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </View>
                 <Ionicons name="checkmark-circle" size={20} color="#dc3545" />
               </View>
@@ -528,13 +810,13 @@ const TanodAttendance: React.FC = () => {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name={canTimeIn ? "enter-outline" : "checkmark-circle"} size={24} color={canTimeIn ? "#fff" : "#28a745"} />
-                  <Text style={[styles.actionButtonText, !canTimeIn && styles.actionButtonTextDisabled]}>
-                    {canTimeIn ? "START SHIFT" : "ALREADY ON DUTY"}
-                  </Text>
-                  <Text style={[styles.actionButtonSubtext, !canTimeIn && styles.actionButtonTextDisabled]}>
-                    {canTimeIn ? "Tap to begin your duty" : "Shift has started"}
-                  </Text>
+                  <Ionicons
+                    name={canTimeIn ? "enter-outline" : timeInUi.icon}
+                    size={24}
+                    color={canTimeIn ? "#fff" : "#6c757d"}
+                  />
+                  <Text style={[styles.actionButtonText, !canTimeIn && styles.actionButtonTextDisabled]}>{timeInUi.title}</Text>
+                  <Text style={[styles.actionButtonSubtext, !canTimeIn && styles.actionButtonTextDisabled]}>{timeInUi.sub}</Text>
                 </>
               )}
             </View>
@@ -581,7 +863,7 @@ const TanodAttendance: React.FC = () => {
           </View>
           <View style={styles.instructionItem}>
             <Ionicons name="information-circle" size={16} color="#007bff" />
-            <Text style={styles.instructionText}>A selfie photo will be required before timing in and timing out</Text>
+            <Text style={styles.instructionText}>A short selfie video (recommended) or selfie photo is required for TIME IN and TIME OUT</Text>
           </View>
         </View>
       </ScrollView>
@@ -740,6 +1022,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginTop: 2,
+  },
+  evidenceRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  evidencePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+  },
+  evidenceText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0f172a",
   },
   actionSection: {
     marginBottom: 20,

@@ -21,6 +21,36 @@ SET time_zone = "+00:00";
 -- Database: `db`
 --
 
+CREATE DATABASE IF NOT EXISTS `db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE `db`;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `incident_types`
+--
+
+CREATE TABLE IF NOT EXISTS `incident_types` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Default incident types
+INSERT INTO `incident_types` (`name`, `icon`, `color`) VALUES
+('Fire', '🔥', '#ff4444'),
+('Medical Emergency', '🚑', '#ff6b6b'),
+('Accident', '🚗', '#ffa500'),
+('Theft', '🔒', '#9b59b6'),
+('Violence', '⚠️', '#e74c3c'),
+('Noise Complaint', '🔊', '#3498db'),
+('Suspicious Activity', '👁️', '#f39c12'),
+('Other', '📋', '#95a5a6');
+
 -- --------------------------------------------------------
 
 --
@@ -54,8 +84,36 @@ CREATE TABLE `logs` (
   `TIME` varchar(255) NOT NULL,
   `TIME_IN` varchar(255) DEFAULT NULL,
   `TIME_OUT` varchar(255) DEFAULT NULL,
-  `LOCATION` varchar(255) NOT NULL,
-  `ACTION` varchar(255) NOT NULL
+  `LOCATION` varchar(255) DEFAULT NULL,
+  `ACTION` varchar(255) NOT NULL,
+  `time_in_photo` varchar(255) DEFAULT NULL,
+  `time_out_photo` varchar(255) DEFAULT NULL,
+  `time_in_video` varchar(255) DEFAULT NULL,
+  `time_out_video` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Optional: firewall blocklist used by server.js
+CREATE TABLE IF NOT EXISTS `firewall_blocked_ips` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ip_address` varchar(64) NOT NULL,
+  `reason` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ip_address` (`ip_address`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Optional: firewall access logs used by server.js
+CREATE TABLE IF NOT EXISTS `firewall_access_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ip_address` varchar(64) NOT NULL,
+  `user` varchar(255) DEFAULT NULL,
+  `action` varchar(255) NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `timestamp` datetime NOT NULL,
+  `device_id` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_timestamp` (`timestamp`),
+  KEY `idx_ip_address` (`ip_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -75,20 +133,36 @@ CREATE TABLE `logs_patrol` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `logs_resident`
+--
+
+CREATE TABLE `logs_resident` (
+  `ID` int(255) NOT NULL,
+  `USER` varchar(255) NOT NULL,
+  `TIME` varchar(255) NOT NULL,
+  `LOCATION` varchar(255) DEFAULT NULL,
+  `ACTION` varchar(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `schedules`
 --
 
 CREATE TABLE `schedules` (
   `ID` int(255) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
   `USER` varchar(255) NOT NULL,
   `STATUS` varchar(255) NOT NULL,
   `LOCATION` varchar(255) DEFAULT NULL,
+  `DAY` varchar(20) DEFAULT NULL,
+  `START_TIME` varchar(20) DEFAULT NULL,
+  `END_TIME` varchar(20) DEFAULT NULL,
+  `MONTH` varchar(20) DEFAULT 'All',
   `TIME` varchar(255) DEFAULT NULL,
   `IMAGE` varchar(255) NOT NULL,
-  PRIMARY KEY (`ID`),
-  UNIQUE KEY `user_id` (`user_id`),
-  FOREIGN KEY (`user_id`) REFERENCES `users`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE
+  PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -157,10 +231,15 @@ ALTER TABLE `logs_patrol`
   ADD PRIMARY KEY (`ID`);
 
 --
+-- Indexes for table `logs_resident`
+--
+ALTER TABLE `logs_resident`
+  ADD PRIMARY KEY (`ID`);
+
+--
 -- Indexes for table `schedules`
 --
 ALTER TABLE `schedules`
-  ADD PRIMARY KEY (`ID`),
   ADD UNIQUE KEY `user_id` (`user_id`);
 
 --
@@ -168,6 +247,10 @@ ALTER TABLE `schedules`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`ID`);
+
+-- Add schedules foreign key after users primary key exists
+ALTER TABLE `schedules`
+  ADD CONSTRAINT `fk_schedules_user_id` FOREIGN KEY (`user_id`) REFERENCES `users`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -183,6 +266,12 @@ ALTER TABLE `logs`
 -- AUTO_INCREMENT for table `logs_patrol`
 --
 ALTER TABLE `logs_patrol`
+  MODIFY `ID` int(255) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `logs_resident`
+--
+ALTER TABLE `logs_resident`
   MODIFY `ID` int(255) NOT NULL AUTO_INCREMENT;
 
 --

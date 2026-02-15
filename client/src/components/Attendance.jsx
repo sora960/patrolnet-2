@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, LogIn, LogOut, Calendar, User, ArrowDown, Loader, MapPin, Camera, Image } from 'lucide-react';
-
-// Replace with your actual BASE_URL
-const BASE_URL = 'http://192.168.100.59:3001';
+import { Clock, LogIn, LogOut, Calendar, User, ArrowDown, Loader, MapPin, Camera, Video } from 'lucide-react';
+import { BASE_URL } from '../config';
 
 const Attendance = () => {
   const [logs, setLogs] = useState([]);
@@ -79,6 +77,12 @@ const Attendance = () => {
       minute: '2-digit',
       hour12: true,
     });
+  };
+
+  const isVideoFile = (filename) => {
+    if (!filename) return false;
+    const lower = String(filename).toLowerCase();
+    return lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.m4v') || lower.endsWith('.webm');
   };
 
   const groupedLogs = groupLogsByDate(logs);
@@ -330,18 +334,58 @@ const Attendance = () => {
                                 color: '#65676b'
                               }}>
                                 <Camera size={12} />
-                                <span>Clock In Photo</span>
+                                <span>{isVideoFile(log.time_in_photo) ? 'Clock In Video' : 'Clock In Photo'}</span>
                               </div>
-                              <img
-                                src={`${BASE_URL}/uploads/${log.time_in_photo}`}
-                                alt="Clock in"
+                              {isVideoFile(log.time_in_photo) ? (
+                                <video
+                                  src={`${BASE_URL}/uploads/${log.time_in_photo}`}
+                                  controls
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: '300px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e4e6eb'
+                                  }}
+                                />
+                              ) : (
+                                <img
+                                  src={`${BASE_URL}/uploads/${log.time_in_photo}`}
+                                  alt="Clock in"
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: '300px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e4e6eb'
+                                  }}
+                                  onError={(e) => e.target.style.display = 'none'}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {/* Time In Video */}
+                          {log.time_in_video && (
+                            <div style={{ marginTop: '8px' }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                marginBottom: '6px',
+                                fontSize: '13px',
+                                color: '#65676b'
+                              }}>
+                                <Video size={12} />
+                                <span>Clock In Video</span>
+                              </div>
+                              <video
+                                src={`${BASE_URL}/uploads/${log.time_in_video}`}
+                                controls
                                 style={{
                                   width: '100%',
                                   maxWidth: '300px',
                                   borderRadius: '12px',
                                   border: '1px solid #e4e6eb'
                                 }}
-                                onError={(e) => e.target.style.display = 'none'}
                               />
                             </div>
                           )}
@@ -358,18 +402,58 @@ const Attendance = () => {
                                 color: '#65676b'
                               }}>
                                 <Camera size={12} />
-                                <span>Clock Out Photo</span>
+                                <span>{isVideoFile(log.time_out_photo) ? 'Clock Out Video' : 'Clock Out Photo'}</span>
                               </div>
-                              <img
-                                src={`${BASE_URL}/uploads/${log.time_out_photo}`}
-                                alt="Clock out"
+                              {isVideoFile(log.time_out_photo) ? (
+                                <video
+                                  src={`${BASE_URL}/uploads/${log.time_out_photo}`}
+                                  controls
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: '300px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e4e6eb'
+                                  }}
+                                />
+                              ) : (
+                                <img
+                                  src={`${BASE_URL}/uploads/${log.time_out_photo}`}
+                                  alt="Clock out"
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: '300px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e4e6eb'
+                                  }}
+                                  onError={(e) => e.target.style.display = 'none'}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {/* Time Out Video */}
+                          {log.time_out_video && (
+                            <div style={{ marginTop: '8px' }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                marginBottom: '6px',
+                                fontSize: '13px',
+                                color: '#65676b'
+                              }}>
+                                <Video size={12} />
+                                <span>Clock Out Video</span>
+                              </div>
+                              <video
+                                src={`${BASE_URL}/uploads/${log.time_out_video}`}
+                                controls
                                 style={{
                                   width: '100%',
                                   maxWidth: '300px',
                                   borderRadius: '12px',
                                   border: '1px solid #e4e6eb'
                                 }}
-                                onError={(e) => e.target.style.display = 'none'}
                               />
                             </div>
                           )}

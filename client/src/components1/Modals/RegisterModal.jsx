@@ -1,6 +1,7 @@
 import './RegisterModal.css';
 
 import React, { useState } from 'react';
+import { BASE_URL } from '../../config';
 import { 
   FaTimes, 
   FaUser, 
@@ -73,7 +74,7 @@ const RegisterModal = ({ show, onClose }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:3001/pre-register-send-code", {
+      const response = await fetch(`${BASE_URL}/pre-register-send-code`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,7 +121,7 @@ const RegisterModal = ({ show, onClose }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:3001/pre-register-verify-code", {
+      const response = await fetch(`${BASE_URL}/pre-register-verify-code`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -201,7 +202,7 @@ const RegisterModal = ({ show, onClose }) => {
     if (validateStep(3)) {
       setIsLoading(true);
       try {
-        const response = await fetch("http://localhost:3001/register", {
+        const response = await fetch(`${BASE_URL}/register`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

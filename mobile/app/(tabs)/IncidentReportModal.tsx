@@ -28,7 +28,7 @@ interface IncidentReportModalProps {
   log: LogEntry | null;
   onClose: () => void;
   onMarkAsRead: () => void;
-  onResolve: (logId: number, imageUri: string) => Promise<void>;
+  onResolve: (logId: number, mediaUri: string) => Promise<void>;
 }
 
 export const IncidentReportModal: React.FC<IncidentReportModalProps> = ({
@@ -60,46 +60,57 @@ export const IncidentReportModal: React.FC<IncidentReportModalProps> = ({
 
   const reportDateTime = formatDateTime(log.TIME);
 
-  const handleResolve = async () => {
-    // 1. Request camera permissions
+  const captureAndSubmit = async (mode: 'photo' | 'video') => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
         "Permission Denied",
-        "Camera access is required to take a photo for proof of resolution."
+        "Camera access is required to capture proof of resolution."
       );
       return;
     }
 
-    // 2. Launch camera
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7, // Use a reasonable quality to reduce file size
+      mediaTypes: mode === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: mode !== 'video',
+      aspect: mode !== 'video' ? [4, 3] : undefined,
+      quality: mode !== 'video' ? 0.7 : undefined,
+      videoMaxDuration: mode === 'video' ? 30 : undefined,
     });
 
-    // 3. Handle result
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const imageUri = result.assets[0].uri;
-      
+      const mediaUri = result.assets[0].uri;
+      const label = mode === 'video' ? 'recorded video' : 'captured photo';
+
       Alert.alert(
         "Confirm Resolution",
-        "Are you sure you want to mark this incident as resolved with the captured photo?",
+        `Are you sure you want to mark this incident as resolved with the ${label}?`,
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "Confirm & Submit",
             onPress: async () => {
               setIsResolving(true);
-              await onResolve(log.ID, imageUri);
+              await onResolve(log.ID, mediaUri);
               setIsResolving(false);
-              onClose(); // Close modal after resolving
+              onClose();
             },
           },
         ]
       );
     }
+  };
+
+  const handleResolve = async () => {
+    Alert.alert(
+      "Choose Proof Type",
+      "Select what proof you want to submit for resolution.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take Photo", onPress: () => captureAndSubmit('photo') },
+        { text: "Record Video", onPress: () => captureAndSubmit('video') },
+      ]
+    );
   };
 
   return (
@@ -457,6 +468,12 @@ export const CommunityAlertModal: React.FC<CommunityAlertModalProps> = ({
     </Modal>
   );
 };
+
+// expo-router treats files under app/ as routes; provide a safe default export.
+// The actual modals are consumed via the named exports above.
+export default function IncidentReportModalRoute() {
+  return null;
+}
 
 const styles = StyleSheet.create({
   modalOverlay: {
