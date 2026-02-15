@@ -31,12 +31,6 @@ yarn-error.log*
 *.pem
 *.orig.*
 
-# Local editor settings
-.vscode/
-
-# Server runtime uploads
-server/uploads/
-
 # Mobile/Expo
 **/.kotlin/
 **/*.jks

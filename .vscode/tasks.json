@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Server: start (3001)",
+      "type": "shell",
+      "command": "node server.js",
+      "options": {
+        "cwd": "${workspaceFolder}\\server"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "patrolnet",
+        "clear": true
+      }
+    },
+    {
+      "label": "Client: start (3000)",
+      "type": "shell",
+      "command": "npm start",
+      "options": {
+        "cwd": "${workspaceFolder}\\client"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "patrolnet",
+        "clear": true
+      }
+    },
+    {
+      "label": "Mobile: start (8081)",
+      "type": "shell",
+      "command": "npx expo start --lan --go --clear",
+      "options": {
+        "cwd": "${workspaceFolder}\\mobile"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "patrolnet",
+        "clear": true
+      }
+    },
+    {
+      "label": "PatrolNet: Start All",
+      "dependsOn": [
+        "Server: start (3001)",
+        "Client: start (3000)",
+        "Mobile: start (8081)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
