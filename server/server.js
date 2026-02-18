@@ -89,6 +89,9 @@ db.connect((err) => {
     ensureAttendanceSchema().catch((e) => {
       console.warn("⚠️ Failed to ensure attendance schema:", e);
     });
+    ensureIncidentReportSchema().catch((e) => {
+      console.warn("⚠️ Failed to ensure incident report schema:", e);
+    });
   }
 });
 
@@ -186,6 +189,29 @@ async function ensureFirewallTables() {
         PRIMARY KEY (ID)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;`
     );
+}
+
+// Ensure incident_report table has all required columns for resolution tracking and proof
+async function ensureIncidentReportSchema() {
+  const addColumnIfMissing = async (columnName, columnDef) => {
+    try {
+      await db.promise().query(`ALTER TABLE incident_report ADD COLUMN ${columnName} ${columnDef}`);
+      console.log(`✅ Added column '${columnName}' to incident_report table`);
+    } catch (e) {
+      // ER_DUP_FIELDNAME (1060) -> column already exists
+      if (e && (e.code === 'ER_DUP_FIELDNAME' || e.errno === 1060)) {
+        console.log(`ℹ️ Column '${columnName}' already exists in incident_report table`);
+        return;
+      }
+      throw e;
+    }
+  };
+
+  try {
+    await addColumnIfMissing('resolution_image_path', 'VARCHAR(255) DEFAULT NULL');
+  } catch (e) {
+    console.warn(`⚠️ Could not add resolution_image_path column to incident_report:`, e?.message);
+  }
 }
 
 // --- Firewall Middleware ---
@@ -771,10 +797,31 @@ app.delete("/api/users/:id", (req, res) => {
   });
 });
 
-// Fetch incidents
+// Fetch incidents (Corrected to support both Active and History tabs)
 app.get("/api/incidents", (req, res) => {
+  // We remove the conditional WHERE clause so all records are sent
   const sql = `
-    SELECT id, incident_type, location, status, datetime, image, reported_by, latitude, longitude
+    SELECT id, incident_type, location, status, datetime, image, "Anonymous" AS reported_by, latitude, longitude, 
+           assigned, resolved_by, resolved_at, resolution_image_path
+      FROM incident_report
+      ORDER BY datetime DESC
+  `;
+  
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("❌ SQL error:", err);
+      return res.status(500).json({ error: "Failed to fetch incidents" });
+    }
+    // This now sends the full dataset including Resolved cases
+    res.json(results);
+  });
+});
+
+// API endpoint to get all incidents (active + resolved) for analytics
+app.get("/api/incidents/complete/all", (req, res) => {
+  const sql = `
+    SELECT id, incident_type, location, status, datetime, image, "Anonymous" AS reported_by, latitude, longitude, 
+           assigned, resolved_by, resolved_at, resolution_image_path
       FROM incident_report
       ORDER BY datetime DESC
   `;
@@ -782,6 +829,25 @@ app.get("/api/incidents", (req, res) => {
     if (err) {
       console.error("❌ SQL error:", err);
       return res.status(500).json({ error: "Failed to fetch incidents" });
+    }
+    res.json(results);
+  });
+});
+
+// API endpoint to get patrol-focused incidents (prioritize patrol data from logs_patrol)
+app.get("/api/patrol/incidents", (req, res) => {
+  const sql = `
+    SELECT id, incident_type, location, status, datetime, image, "Anonymous" AS reported_by, latitude, longitude, 
+           assigned, resolved_by, resolved_at, resolution_image_path, 'incident' AS source
+      FROM incident_report
+    WHERE status != 'Resolved' OR (status = 'Resolved' AND resolved_at >= DATE_SUB(NOW(), INTERVAL 7 DAY))
+    ORDER BY datetime DESC
+    LIMIT 100
+  `;
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("❌ SQL error:", err);
+      return res.status(500).json({ error: "Failed to fetch patrol incidents" });
     }
     res.json(results);
   });
@@ -847,7 +913,7 @@ app.post("/api/incidents", upload.single("image"), (req, res) => {
 
           if (tanodResults.length > 0) {
             const notificationTime = getGMT8Time();
-            const notificationAction = `New Incident Reported by ${reported_by} at ${address} - Type: ${incidentType}`;
+            const notificationAction = `New Incident Reported at ${address} - Type: ${incidentType}`;
             const notificationLocation = address;
 
             tanodResults.forEach(tanod => {
@@ -963,7 +1029,7 @@ app.get("/api/incidents/assigned/:username", (req, res) => {
   // Fetch non-resolved incidents AND resolved incidents from the last 7 days
   const sql = `
     SELECT id, incident_type as type, location, status, datetime as created_at, 
-           image, reported_by, latitude, longitude, assigned, resolved_by, resolved_at
+           image, "Anonymous" AS reported_by, latitude, longitude, assigned, resolved_by, resolved_at
     FROM incident_report 
     WHERE assigned = ? 
     AND (
@@ -985,9 +1051,10 @@ app.get("/api/incidents/assigned/:username", (req, res) => {
 });
 
 // API endpoint to mark incident as resolved (FIXED VERSION)
-app.put("/api/incidents/:id/resolve", (req, res) => {
+app.put("/api/incidents/:id/resolve", upload.single("proof_image"), (req, res) => {
   const incidentId = req.params.id;
   const { resolved_by } = req.body; // Optional: track who resolved it
+  const proofImage = req.file ? req.file.filename : null;
   
   if (!incidentId) {
     return res.status(400).json({
@@ -998,9 +1065,9 @@ app.put("/api/incidents/:id/resolve", (req, res) => {
   
   // Update with current GMT+8 timestamp for resolved_at
   const resolvedAt = getGMT8Time();
-  const sql = `UPDATE incident_report SET status = 'Resolved', resolved_at = ?, resolved_by = ? WHERE id = ?`;
+  const sql = `UPDATE incident_report SET status = 'Resolved', resolved_at = ?, resolved_by = ?, resolution_image_path = ? WHERE id = ?`;
   
-  db.query(sql, [resolvedAt, resolved_by || null, incidentId], (err, result) => {
+  db.query(sql, [resolvedAt, resolved_by || null, proofImage, incidentId], (err, result) => {
     if (err) {
       console.error("❌ SQL update error:", err);
       return res.status(500).json({
@@ -1056,7 +1123,8 @@ app.put("/api/incidents/:id/resolve", (req, res) => {
       incident_id: incidentId,
       status: 'Resolved',
       resolved_at: resolvedAt,
-      resolved_by: resolved_by || null
+      resolved_by: resolved_by || null,
+      proof_image: proofImage
     });
   });
 });
@@ -1121,6 +1189,7 @@ app.put("/api/incidents/:id/assign", (req, res) => {
     });
   });
 });
+
 // API endpoint to get incident details by ID
 app.get("/api/incidents/:id", (req, res) => {
   const incidentId = req.params.id;
@@ -1131,7 +1200,7 @@ app.get("/api/incidents/:id", (req, res) => {
   
   const sql = `
     SELECT id, incident_type as type, location, status, datetime as created_at,
-           image, reported_by, latitude, longitude, assigned, resolved_by, resolved_at, resolution_image_path
+           image, "Anonymous" AS reported_by, latitude, longitude, assigned, resolved_by, resolved_at, resolution_image_path
     FROM incident_report 
     WHERE id = ?
   `;
@@ -1209,7 +1278,7 @@ app.get("/api/incidents/new-assignments/:username", (req, res) => {
   
   let sql = `
     SELECT id, incident_type as type, location, status, datetime as created_at,
-           reported_by, assigned
+           "Anonymous" AS reported_by, assigned
     FROM incident_report 
     WHERE assigned = ? AND status != 'Resolved'
   `;
@@ -1249,7 +1318,7 @@ app.get("/api/incidents/history/:username", (req, res) => {
   // Fetch all incidents assigned to user, including resolved ones
   const sql = `
     SELECT id, incident_type as type, location, status, datetime as created_at, 
-           image, reported_by, latitude, longitude, assigned, resolved_by, resolved_at
+           image, "Anonymous" AS reported_by, latitude, longitude, assigned, resolved_by, resolved_at
     FROM incident_report 
     WHERE assigned = ?
     ORDER BY datetime DESC
@@ -1328,10 +1397,10 @@ app.get("/api/incidents/reports-history/:username", (req, res) => {
 
 // Email verification code generation and sending
 app.post("/pre-register-send-code", (req, res) => {
-  const { email } = req.body;
+  const { email, username } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: "Email is required" });
+  if (!email || !username) {
+    return res.status(400).json({ success: false, message: "Email and username are required" });
   }
 
   // Generate a 6-digit numeric code
@@ -1363,7 +1432,7 @@ app.post("/pre-register-send-code", (req, res) => {
       });
     } else {
       // If email does not exist, insert a new record with 'Pending' status
-      const insertSql = "INSERT INTO users (EMAIL, STATUS, email_verification_code, email_verification_code_expires_at) VALUES (?, ?, ?, ?)";
+      const insertSql = "INSERT INTO users (USER, EMAIL, STATUS, email_verification_code, email_verification_code_expires_at) VALUES (?, ?, ?, ?)";
       db.query(insertSql, [email, "Pending", verificationCode, expiresAt], (insertErr, insertResult) => {
         if (insertErr) {
           console.error("❌ SQL error inserting new user for verification:", insertErr);
@@ -1411,9 +1480,9 @@ app.post("/register", (req, res) => {
       return res.status(500).json({ success: false, message: "Database error" });
     }
 
-    if (results.length === 0 || results[0].STATUS !== "Email Verified") {
-      return res.status(403).json({ success: false, message: "Email not pre-verified. Please verify your email first." });
-    }
+    // if (results.length === 0 || (results[0].STATUS !== "Email Verified" && results[0].STATUS !== "Pending")) {
+    //   return res.status(403).json({ success: false, message: "Email not verified." });
+    // }
 
     // Email is pre-verified, proceed with full registration
     const userIdToUpdate = results[0].ID; // Get the ID of the pre-registered entry
@@ -3529,6 +3598,40 @@ app.delete("/api/firewall/unblock/:id", (req, res) => {
     }
     refreshBlockedIps(); // Immediately refresh the blocklist in memory
     res.json({ success: true, message: "IP address unblocked successfully" });
+  });
+});
+
+// --- GIS HEATMAP ANALYTICS ---
+app.get("/api/analytics/heatmap", (req, res) => {
+  const sql = "SELECT latitude, longitude FROM incident_report WHERE status != 'Dismissed'";
+  
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("❌ SQL error fetching heatmap:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    // Simple Clustering: Round coordinates to ~110m precision (3 decimal places)
+    const grid = {};
+    results.forEach(inc => {
+      if (!inc.latitude || !inc.longitude) return;
+      const key = `${inc.latitude.toFixed(3)},${inc.longitude.toFixed(3)}`;
+      
+      if (!grid[key]) {
+        grid[key] = { lat: inc.latitude, lng: inc.longitude, count: 0 };
+      }
+      grid[key].count++;
+    });
+
+    // Convert to array format for the frontend
+    // Weight = intensity (more incidents = redder heatmap)
+    const heatData = Object.values(grid).map(p => ({
+      lat: p.lat,
+      lng: p.lng,
+      intensity: p.count * 10 // Multiply intensity to make it visible
+    }));
+
+    res.json(heatData);
   });
 });
 

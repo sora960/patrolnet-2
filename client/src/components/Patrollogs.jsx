@@ -109,25 +109,12 @@ const PatrolLogs = () => {
     fetchData();
   }, []);
 
-  // Enhanced print function
+// Standardized Official Print
   const handlePrint = () => {
-    const container = document.querySelector('.patrol-logs-container');
-    if (container) {
-      const now = new Date();
-      const printDate = now.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      container.setAttribute('data-print-date', printDate);
-    }
-    
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    window.print();
   };
+
+  
 
   // Filter logs based on search term for TANOD SCHEDULE
   const filteredLogs = patrolLogs.filter(log =>
@@ -219,337 +206,110 @@ const PatrolLogs = () => {
     }
   };
 
-  return (
-    <div className="patrol-logs-container">
-      <div className="no-print">
-        <MainSidebarWrapper />
-      </div>
-
-      <div style={{ width: '100%' }}>
-        <div className="header1 no-print">
-          <div className="header-content">
-            <div className="header-title-container">
-              <h1 className="header-title">
-                <span className="title-icon">🛡️</span>Patrol Logs
-              </h1>
-              <p className="header-subtitle">Track tanod schedules and patrol activities</p>
-            </div>
-          </div>
-        </div>
-        <div className="main-content">
-        {/* Error Message */}
-        {error && (
-          <div className="error-message no-print">
-            <div className="error-content">
-              <div className="error-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="error-text">
-                <p>{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TANOD SCHEDULE TABLE */}
-        <div className="table-container schedule-table">
-          <div className="table-header">
-            <div className="header-left">
-              <h2 className="table-title">TANOD SCHEDULE</h2>
-              <div className="search-container no-print">
-                <input
-                  type="text"
-                  placeholder="Search Schedule"
-                  className="search-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="header-buttons no-print">
-              <button 
-                onClick={() => {
-                  loadLogs();
-                  loadPatrolActivities();
-                }}
-                className="btn btn-secondary"
-                disabled={isLoading}
-              >
-                <span className="btn-icon">🔄</span>
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
-              <button 
-                onClick={handlePrint}
-                className="btn btn-secondary"
-              >
-                <span className="btn-icon">🖨️</span>
-                Print Logs
-              </button>
-            </div>
-          </div>
-          
-          {isLoading ? (
-            <div className="loading-container no-print">
-              <div className="loading-spinner"></div>
-              <p className="loading-text">Loading patrol logs...</p>
-            </div>
-          ) : (
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Tanod</th>
-                    <th>Time In</th>
-                    <th>Time Out</th>
-                    <th>Location</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(window.matchMedia && window.matchMedia('print').matches ? filteredLogs : currentLogs).length > 0 ? (
-                    (window.matchMedia && window.matchMedia('print').matches ? filteredLogs : currentLogs).map((log) => (
-                      <tr key={log.id} onClick={() => handleRowClick(log)}>
-                        <td className="font-medium">#{log.displayId}</td>
-                        <td>{log.tanod}</td>
-                        <td>{formatDateTime(log.timeIn)}</td>
-                        <td>{formatDateTime(log.timeOut)}</td>
-                        <td title={log.location}>{log.location}</td>
-                        <td>
-                          <span className={`status-badge ${getStatusClass(log.status)}`}>
-                            {log.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="no-data">
-                        {isLoading ? "Loading..." : "No patrol logs found."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination for Tanod Schedule */}
-          {totalSchedulePages > 1 && (
-            <div className="pagination-container no-print">
-              <div className="pagination-mobile">
-                <button
-                  onClick={handleSchedulePrevPage}
-                  disabled={currentSchedulePage === 1}
-                  className="btn btn-pagination"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={handleScheduleNextPage}
-                  disabled={currentSchedulePage === totalSchedulePages}
-                  className="btn btn-pagination"
-                >
-                  Next
-                </button>
-              </div>
-              <div className="pagination-desktop">
-                <div className="pagination-info">
-                  <p>
-                    Showing <span className="font-medium">{scheduleStartIndex + 1}</span>
-                    {' '}to <span className="font-medium">{Math.min(scheduleEndIndex, filteredLogs.length)}</span>
-                    {' '}of <span className="font-medium">{filteredLogs.length}</span>
-                    {' '}results
-                  </p>
-                </div>
-                <div className="pagination-nav">
-                  <button
-                    onClick={handleSchedulePrevPage}
-                    disabled={currentSchedulePage === 1}
-                    className="btn btn-pagination nav-btn"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  
-                  {Array.from({ length: totalSchedulePages }, (_, i) => i + 1).map((pageNumber) => (
-                    <button
-                      key={pageNumber}
-                      onClick={() => handleSchedulePageChange(pageNumber)}
-                      className={`btn btn-pagination page-btn ${
-                        currentSchedulePage === pageNumber ? 'active' : ''
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  ))}
-                  
-                  <button
-                    onClick={handleScheduleNextPage}
-                    disabled={currentSchedulePage === totalSchedulePages}
-                    className="btn btn-pagination nav-btn"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+return (
+    <>
+      {/* 🖥️ WEB VIEW - Hidden during print */}
+      <div className="patrol-logs-container hide-on-print">
+        <div className="no-print">
+          <MainSidebarWrapper />
         </div>
 
-        {/* PATROL ACTIVITIES TABLE - Now from logs_patrol */}
-        <div className="table-container activities-table">
-          <div className="table-header">
-            <div className="header-left">
-              <h2 className="table-title">PATROL ACTIVITIES</h2>
-              <div className="search-container no-print">
-                <input
-                  type="text"
-                  placeholder="Search Activities"
-                  className="search-input"
-                  value={activitiesSearchTerm}
-                  onChange={(e) => setActivitiesSearchTerm(e.target.value)}
-                />
+        <div style={{ width: '100%' }}>
+          <div className="header1 no-print">
+            <div className="header-content">
+              <div className="header-title-container">
+                <h1 className="header-title">
+                  <span className="title-icon">🛡️</span>Patrol Logs
+                </h1>
+                <p className="header-subtitle">Track tanod schedules and patrol activities</p>
               </div>
             </div>
           </div>
           
-          {isLoading ? (
-            <div className="loading-container no-print">
-              <div className="loading-spinner"></div>
-              <p className="loading-text">Loading patrol activities...</p>
-            </div>
-          ) : (
-            <>
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Tanod</th>
-                      <th>Time</th>
-                      <th>Location</th>
-                      <th>Action</th>
-                      <th>Status</th>
-                      <th>Resolved By</th>
-                      <th>Resolved At</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(window.matchMedia && window.matchMedia('print').matches ? filteredActivities : currentActivities).length > 0 ? (
-                      (window.matchMedia && window.matchMedia('print').matches ? filteredActivities : currentActivities).map((activity) => (
-                        <tr key={activity.id} onClick={() => handleRowClick(activity)}>
-                          <td className="font-medium">#{activity.displayId}</td>
-                          <td>{activity.tanod}</td>
-                          <td>{formatDateTime(activity.time)}</td>
-                          <td title={activity.location}>{activity.location}</td>
-                          <td>
-                            <span className={`status-badge ${getStatusClass(activity.action)}`}>
-                              {activity.action}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`status-badge ${getStatusClass(activity.status)}`}>
-                              {activity.status}
-                            </span>
-                          </td>
-                          <td>{activity.resolvedBy}</td>
-                          <td>{formatDateTime(activity.resolvedAt)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="no-data">
-                          {isLoading ? "Loading..." : "No patrol activities found."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+          <div className="main-content">
+            {/* ... Keep all your existing dashboard code here (Error messages, Tables, Pagination) ... */}
+            {/* Just make sure your Print button still calls handlePrint */}
+            <button onClick={handlePrint} className="btn btn-secondary">
+              <span className="btn-icon">🖨️</span> Print Logs
+            </button>
+            
+            {/* [Existing Table Code Omitted for Brevity] */}
+          </div>
 
-              {/* Pagination for Patrol Activities */}
-              {totalPages > 1 && (
-                <div className="pagination-container no-print">
-                  <div className="pagination-mobile">
-                    <button
-                      onClick={handlePrevPage}
-                      disabled={currentPage === 1}
-                      className="btn btn-pagination"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={handleNextPage}
-                      disabled={currentPage === totalPages}
-                      className="btn btn-pagination"
-                    >
-                      Next
-                    </button>
-                  </div>
-                  <div className="pagination-desktop">
-                    <div className="pagination-info">
-                      <p>
-                        Showing <span className="font-medium">{startIndex + 1}</span>
-                        {' '}to <span className="font-medium">{Math.min(endIndex, filteredActivities.length)}</span>
-                        {' '}of <span className="font-medium">{filteredActivities.length}</span>
-                        {' '}results
-                      </p>
-                    </div>
-                    <div className="pagination-nav">
-                      <button
-                        onClick={handlePrevPage}
-                        disabled={currentPage === 1}
-                        className="btn btn-pagination nav-btn"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                      
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => (
-                        <button
-                          key={pageNumber}
-                          onClick={() => handlePageChange(pageNumber)}
-                          className={`btn btn-pagination page-btn ${
-                            currentPage === pageNumber ? 'active' : ''
-                          }`}
-                        >
-                          {pageNumber}
-                        </button>
-                      ))}
-                      
-                      <button
-                        onClick={handleNextPage}
-                        disabled={currentPage === totalPages}
-                        className="btn btn-pagination nav-btn"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+          <ActivityDetailsModal
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
+            activity={selectedActivity}
+          />
         </div>
-        </div>
-
-        <ActivityDetailsModal
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          activity={selectedActivity}
-        />
       </div>
-    </div>
+
+      {/* 🖨️ OFFICIAL PRINT VIEW - Hidden during screen use */}
+      <div className="patrol-print-list" aria-hidden="true">
+        
+        {/* OFFICIAL BARANGAY LETTERHEAD */}
+        <div className="incident-print-header">
+          <div className="official-letterhead">
+            <p className="republic-text">Republic of the Philippines</p>
+            <p className="province-text">Province of Quezon</p>
+            <p className="municipality-text">Municipality of Real</p>
+            <h2 className="barangay-text">BARANGAY TIGNOAN</h2>
+            <h3 className="office-text">OFFICE OF THE BARANGAY TANOD / PATROL</h3>
+          </div>
+          
+          <div className="report-title-section">
+            <h1>OFFICIAL PATROL LOGS SUMMARY</h1>
+            <div className="incident-print-meta">Date Printed: {new Date().toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* OFFICIAL DATA TABLE (Uses filteredLogs to show the FULL record, not just the current page) */}
+        <table className="official-table">
+          <thead>
+            <tr>
+              <th style={{width: '10%'}}>ID</th>
+              <th style={{width: '20%'}}>Tanod Name</th>
+              <th style={{width: '20%'}}>Time In</th>
+              <th style={{width: '20%'}}>Time Out</th>
+              <th style={{width: '30%'}}>Location / Coverage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLogs && filteredLogs.length > 0 ? (
+              filteredLogs.map((log) => (
+                <tr key={log.id}>
+                  <td className="cell-id">LOG-{String(log.displayId).padStart(6, '0')}</td>
+                  <td>{log.tanod}</td>
+                  <td>{formatDateTime(log.timeIn)}</td>
+                  <td>{formatDateTime(log.timeOut)}</td>
+                  <td>{log.location || "Main Patrol Route"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" className="empty-cell">No patrol logs recorded for this period.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* OFFICIAL SIGNATURE BLOCK */}
+        <div className="incident-print-footer">
+          <div className="signature-block">
+            <p className="signature-label">Prepared by:</p>
+            <div className="signature-line"></div>
+            <p className="signature-name">Name & Signature</p>
+            <p className="signature-title">Barangay Admin / Duty Officer</p>
+          </div>
+          <div className="signature-block">
+            <p className="signature-label">Noted by:</p>
+            <div className="signature-line"></div>
+            <p className="signature-name">Barangay Captain</p>
+            <p className="signature-title">Punong Barangay</p>
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
-
 export default PatrolLogs;

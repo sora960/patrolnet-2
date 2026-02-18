@@ -506,3 +506,56 @@
   background: #f3f4f6;
   color: #374151;
 }
+
+
+/* 🔥 Resolution Card Styles 🔥 */
+.resolution-card {
+  margin-top: 24px;
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+}
+
+.resolution-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #065f46;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #a7f3d0;
+  padding-bottom: 12px;
+}
+
+.resolution-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.highlight-success {
+  background: #ffffff;
+  border-color: #34d399;
+  color: #065f46;
+  font-weight: 700;
+}
+
+.success-border {
+  background: #ffffff;
+  border-color: #34d399;
+}
+
+.no-proof-warning {
+  margin-top: 16px;
+  background: #fffbeb;
+  color: #b45309;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px dashed #fcd34d;
+  font-size: 13px;
+  text-align: center;
+  font-weight: 500;
+}

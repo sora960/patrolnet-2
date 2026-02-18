@@ -14,7 +14,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-
 function ViewIncidentModal({ 
   showModal, 
   selectedIncident, 
@@ -25,276 +24,163 @@ function ViewIncidentModal({
 }) {
   if (!showModal || !selectedIncident) return null;
 
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'Not available';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', {
+        year: 'numeric', month: 'short', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: true
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
+
+  // ✅ OFFICIAL PRINT FUNCTION
+  const handlePrint = () => {
+    const printWindow = window.open('', '', 'height=800,width=1000');
+    
+    // Official LGU HTML Template
+    const printHtml = `
+      <html>
+        <head>
+          <title>Incident Report - ${selectedIncident.id}</title>
+          <style>
+            @page { size: A4; margin: 20mm; }
+            body { font-family: "Times New Roman", Times, serif; padding: 20px; color: #111827; line-height: 1.6; }
+            .official-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .republic { text-transform: uppercase; font-size: 14px; margin: 0; letter-spacing: 1px; }
+            .province { font-size: 14px; margin: 0; }
+            .barangay { font-size: 24px; font-weight: bold; margin: 5px 0; color: #b91c1c; }
+            .document-title { font-size: 16px; font-weight: bold; margin-top: 10px; text-decoration: underline; }
+            
+            .section { margin-top: 25px; }
+            .section-title { font-weight: bold; text-transform: uppercase; background: #f3f4f6; padding: 5px 10px; font-size: 13px; border: 1px solid #000; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; }
+            .label { font-weight: bold; color: #374151; }
+            .value { border-bottom: 1px dashed #ccc; }
+            
+            .resolution-card { margin-top: 20px; border: 2px solid #059669; padding: 15px; background-color: #f0fdf4; }
+
+            .signature-row { display: flex; justify-content: space-around; margin-top: 60px; }
+            .sig-block { text-align: center; width: 250px; }
+            .sig-line { border-bottom: 1px solid #000; margin-bottom: 5px; }
+            .sig-name { font-weight: bold; text-transform: uppercase; }
+            .sig-title { font-size: 12px; }
+
+            .footer-note { text-align: center; font-size: 10px; margin-top: 50px; font-style: italic; color: #6b7280; }
+          </style>
+        </head>
+        <body>
+          <div class="official-header">
+            <p class="republic">Republic of the Philippines</p>
+            <p class="province">Province of Quezon | Municipality of Real</p>
+            <h1 class="barangay">BARANGAY TIGNOAN</h1>
+            <h2 class="document-title">OFFICIAL INCIDENT REPORT</h2>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Incident Details</div>
+            <div class="grid">
+              <div><span class="label">Incident ID:</span> <span class="value">INC-${String(selectedIncident.id).padStart(6, '0')}</span></div>
+              <div><span class="label">Type:</span> <span class="value">${selectedIncident.incident_type}</span></div>
+              <div><span class="label">Date/Time:</span> <span class="value">${formatDateTime(selectedIncident.datetime)}</span></div>
+              <div><span class="label">Status:</span> <span class="value">${selectedIncident.status}</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Location & Handler</div>
+            <div class="grid">
+              <div style="grid-column: span 2;"><span class="label">Location:</span> <span class="value">${selectedIncident.location}</span></div>
+              <div><span class="label">Assigned Officer:</span> <span class="value">${selectedIncident.assigned_tanod || 'Unassigned'}</span></div>
+              <div><span class="label">Reporter:</span> <span class="value">Identity Protected (Anonymous)</span></div>
+            </div>
+          </div>
+
+          ${selectedIncident.description ? `
+          <div class="section">
+            <div class="section-title">Description</div>
+            <div style="padding: 10px; border: 1px solid #eee;">${selectedIncident.description}</div>
+          </div>
+          ` : ''}
+
+          ${selectedIncident.status === 'Resolved' ? `
+            <div class="resolution-card">
+              <div style="font-weight: bold; text-decoration: underline; margin-bottom: 10px;">OFFICIAL RESOLUTION</div>
+              <div><strong>Resolved By:</strong> ${selectedIncident.resolved_by || 'Admin'}</div>
+              <div><strong>Date Resolved:</strong> ${formatDateTime(selectedIncident.resolved_at)}</div>
+              <div><strong>Evidence:</strong> Verified and on file.</div>
+            </div>
+          ` : ''}
+
+          <div class="signature-row">
+            <div class="sig-block">
+              <div class="sig-line"></div>
+              <div class="sig-name">Barangay Duty Officer</div>
+              <div class="sig-title">Prepared By</div>
+            </div>
+            <div class="sig-block">
+              <div class="sig-line"></div>
+              <div class="sig-name">Punong Barangay</div>
+              <div class="sig-title">Attested By</div>
+            </div>
+          </div>
+
+          <p class="footer-note">Generated by PatrolNet System. This document is official and valid without a wet seal if verified online.</p>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
-      case 'resolved':
-        return 'status-resolved';
-      case 'in progress':
-      case 'ongoing':
-        return 'status-progress';
-      case 'pending':
-      case 'new':
-        return 'status-pending';
-      default:
-        return '';
+      case 'resolved': return 'status-resolved';
+      case 'in progress': case 'ongoing': return 'status-progress';
+      case 'pending': case 'new': return 'status-pending';
+      default: return '';
     }
   };
 
   const getPriorityClass = (priority) => {
     switch (priority?.toLowerCase()) {
-      case 'high':
-      case 'critical':
-        return 'priority-high';
-      case 'medium':
-      case 'normal':
-        return 'priority-medium';
-      case 'low':
-        return 'priority-low';
-      default:
-        return '';
+      case 'high': case 'critical': return 'priority-high';
+      case 'medium': case 'normal': return 'priority-medium';
+      case 'low': return 'priority-low';
+      default: return '';
     }
   };
 
   const hasCoordinates = () => {
-    return selectedIncident && 
-           selectedIncident.latitude && 
-           selectedIncident.longitude;
-  };
-
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Incident Report - INC-${String(selectedIncident.id).padStart(6, '0')}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              margin: 20px;
-              line-height: 1.6;
-              color: #333;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-              border-bottom: 2px solid #333;
-              padding-bottom: 20px;
-            }
-            .incident-id {
-              font-size: 24px;
-              font-weight: bold;
-              color: #2563eb;
-            }
-            .info-grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 20px;
-              margin-bottom: 20px;
-            }
-            .info-row {
-              display: contents;
-            }
-            .info-field {
-              margin-bottom: 15px;
-            }
-            .label {
-              font-weight: bold;
-              color: #374151;
-              margin-bottom: 5px;
-            }
-            .value {
-              padding: 8px;
-              background-color: #f9fafb;
-              border-radius: 4px;
-              border: 1px solid #e5e7eb;
-            }
-            .status-resolved { color: #059669; font-weight: bold; }
-            .status-progress { color: #d97706; font-weight: bold; }
-            .status-pending { color: #dc2626; font-weight: bold; }
-            .priority-high { color: #dc2626; font-weight: bold; }
-            .priority-medium { color: #d97706; font-weight: bold; }
-            .priority-low { color: #059669; font-weight: bold; }
-            .description {
-              grid-column: 1 / -1;
-              margin-top: 10px;
-            }
-            .description .value {
-              min-height: 60px;
-              white-space: pre-wrap;
-            }
-            .image-section {
-              grid-column: 1 / -1;
-              margin-top: 20px;
-            }
-            .image-section img {
-              max-width: 400px;
-              max-height: 300px;
-              border: 1px solid #e5e7eb;
-              border-radius: 4px;
-            }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 12px;
-              color: #6b7280;
-              border-top: 1px solid #e5e7eb;
-              padding-top: 15px;
-            }
-            @media print {
-              body { margin: 0; }
-              .header { page-break-after: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Incident Report</h1>
-            <div class="incident-id">INC-${String(selectedIncident.id).padStart(6, '0')}</div>
-          </div>
-          
-          <div class="info-grid">
-            <div class="info-field">
-              <div class="label">Status:</div>
-              <div class="value ${getStatusClass(selectedIncident.status)}">${selectedIncident.status || 'Unknown'}</div>
-            </div>
-            <div class="info-field">
-              <div class="label">Priority:</div>
-              <div class="value ${getPriorityClass(selectedIncident.priority)}">${selectedIncident.priority || 'Normal'}</div>
-            </div>
-            
-            <div class="info-field">
-              <div class="label">Incident Type:</div>
-              <div class="value">${selectedIncident.incident_type || 'Not specified'}</div>
-            </div>
-            <div class="info-field">
-              <div class="label">Location:</div>
-              <div class="value">${selectedIncident.location || 'Not specified'}</div>
-            </div>
-            
-            <div class="info-field">
-              <div class="label">Reported By:</div>
-              <div class="value">${selectedIncident.reported_by || 'Anonymous'}</div>
-            </div>
-            <div class="info-field">
-              <div class="label">Reported Time:</div>
-              <div class="value">${formatDateTime(selectedIncident.datetime)}</div>
-            </div>
-            
-            ${selectedIncident.assigned_tanod ? `
-              <div class="info-field">
-                <div class="label">Assigned Tanod:</div>
-                <div class="value">${selectedIncident.assigned_tanod}</div>
-              </div>
-            ` : ''}
-            
-            ${selectedIncident.resolved_at ? `
-              <div class="info-field">
-                <div class="label">Resolved Time:</div>
-                <div class="value">${formatDateTime(selectedIncident.resolved_at)}</div>
-              </div>
-            ` : ''}
-            
-            ${selectedIncident.resolved_by ? `
-              <div class="info-field">
-                <div class="label">Resolved By:</div>
-                <div class="value">${selectedIncident.resolved_by}</div>
-              </div>
-            ` : ''}
-            
-            ${selectedIncident.description ? `
-              <div class="description">
-                <div class="info-field">
-                  <div class="label">Description:</div>
-                  <div class="value">${selectedIncident.description}</div>
-                </div>
-              </div>
-            ` : ''}
-            
-            ${selectedIncident.notes ? `
-              <div class="description">
-                <div class="info-field">
-                  <div class="label">Additional Notes:</div>
-                  <div class="value">${selectedIncident.notes}</div>
-                </div>
-              </div>
-            ` : ''}
-            
-            ${selectedIncident.image ? `
-              <div class="image-section">
-                <div class="info-field">
-                  <div class="label">Evidence Photo:</div>
-                  <div class="value">
-                    <img src="${BASE_URL}/uploads/${selectedIncident.image}" alt="Incident evidence" onerror="this.style.display='none'; this.parentNode.innerHTML='<div>Evidence photo not available for printing</div>';" />
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-          </div>
-          
-          <div class="footer">
-            Generated on: ${new Date().toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            })}<br>
-            Last updated: ${formatDateTime(selectedIncident.updated_at || selectedIncident.datetime)}
-          </div>
-        </body>
-      </html>
-    `;
-    
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+    return selectedIncident && selectedIncident.latitude && selectedIncident.longitude;
   };
 
   const handleImageClick = (imageSrc) => {
     const imageOverlay = document.createElement('div');
     imageOverlay.className = 'image-viewer-overlay';
-    
     const img = document.createElement('img');
     img.src = imageSrc;
     img.alt = 'Incident Evidence - Full Size';
-    
     imageOverlay.appendChild(img);
-    imageOverlay.onclick = () => {
-      document.body.removeChild(imageOverlay);
-    };
-    
-    // Add escape key listener
+    imageOverlay.onclick = () => document.body.removeChild(imageOverlay);
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         document.body.removeChild(imageOverlay);
         document.removeEventListener('keydown', handleEscape);
       }
     };
-    
     document.addEventListener('keydown', handleEscape);
     document.body.appendChild(imageOverlay);
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return 'Not available';
-    
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (error) {
-      return 'Invalid date';
-    }
   };
 
   const isResolved = selectedIncident.status?.toLowerCase() === 'resolved';
@@ -363,7 +249,7 @@ function ViewIncidentModal({
               </div>
             </div>
 
-            {/* Location and Reporter Row */}
+            {/* Location and Reported Time Row */}
             <div className="modal-info-row">
               <div className="modal-field">
                 <label>Location</label>
@@ -372,50 +258,22 @@ function ViewIncidentModal({
                 </div>
               </div>
               <div className="modal-field">
-                <label>Reported By</label>
-                <div className="modal-value">
-                  {selectedIncident.reported_by || "Anonymous"}
-                </div>
-              </div>
-            </div>
-
-            {/* Timestamps Row */}
-            <div className="modal-info-row">
-              <div className="modal-field">
                 <label>Reported Time</label>
                 <div className="modal-value timestamp">
                   {formatDateTime(selectedIncident.datetime)}
                 </div>
               </div>
-              {selectedIncident.resolved_at && (
-                <div className="modal-field">
-                  <label>Resolved Time</label>
-                  <div className="modal-value timestamp">
-                    {formatDateTime(selectedIncident.resolved_at)}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Assignment Information */}
-            {(selectedIncident.assigned_tanod || selectedIncident.resolved_by) && (
-              <div className="modal-info-row">
-                {selectedIncident.assigned_tanod && (
-                  <div className="modal-field">
-                    <label>Assigned Tanod</label>
-                    <div className="modal-value">
-                      {selectedIncident.assigned_tanod}
-                    </div>
+            {/* Assigned Tanod Row (Only shows if someone is assigned) */}
+            {selectedIncident.assigned_tanod && (
+              <div className="modal-info-row single-column">
+                <div className="modal-field">
+                  <label>Assigned Tanod</label>
+                  <div className="modal-value">
+                    {selectedIncident.assigned_tanod}
                   </div>
-                )}
-                {selectedIncident.resolved_by && (
-                  <div className="modal-field">
-                    <label>Resolved By</label>
-                    <div className="modal-value">
-                      {selectedIncident.resolved_by}
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -429,22 +287,21 @@ function ViewIncidentModal({
                       center={[parseFloat(selectedIncident.latitude), parseFloat(selectedIncident.longitude)]} 
                       zoom={16} 
                       style={{ height: '250px', width: '100%', borderRadius: '8px' }}
-                      key={selectedIncident.id} /* Add key to force re-render on incident change */
+                      key={selectedIncident.id}
                     >
                       <TileLayer
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                       />
                       <Marker position={[parseFloat(selectedIncident.latitude), parseFloat(selectedIncident.longitude)]}>
-                        <Popup>
-                          {selectedIncident.location}
-                        </Popup>
+                        <Popup>{selectedIncident.location}</Popup>
                       </Marker>
                     </MapContainer>
                   </div>
                 </div>
               </div>
             )}
+            
             {/* Description */}
             {selectedIncident.description && (
               <div className="modal-info-row single-column">
@@ -479,40 +336,64 @@ function ViewIncidentModal({
               </div>
             )}
 
-            {/* Resolution Image Proof */}
-            {selectedIncident.resolution_image_path && (
-              <div className="modal-info-row single-column">
-                <div className="modal-field">
-                  <label>Resolution Proof</label>
-                  <div className="modal-image-container">
-                    {/\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i.test(selectedIncident.resolution_image_path) ? (
-                      <video
-                        src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
-                        className="modal-image"
-                        controls
-                        playsInline
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.parentNode.innerHTML = '<div class="image-placeholder">Resolution video not available</div>';
-                        }}
-                      />
-                    ) : (
-                      <img
-                        src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
-                        alt="Resolution proof"
-                        className="modal-image"
-                        onClick={() => handleImageClick(`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`)}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.parentNode.innerHTML = '<div class="image-placeholder">Resolution photo not available</div>';
-                        }}
-                        title="Click to view full size"
-                      />
-                    )}
+            {/* RESOLUTION DETAILS CARD */}
+            {isResolved && (
+              <div className="resolution-card">
+                <div className="resolution-card-header">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <h3>Official Resolution Details</h3>
+                </div>
+                
+                <div className="modal-info-row">
+                  <div className="modal-field">
+                    <label>Resolved By</label>
+                    <div className="modal-value highlight-success">
+                      {selectedIncident.resolved_by || 'Unknown'}
+                    </div>
+                  </div>
+                  <div className="modal-field">
+                    <label>Date & Time Resolved</label>
+                    <div className="modal-value timestamp">
+                      {formatDateTime(selectedIncident.resolved_at)}
+                    </div>
                   </div>
                 </div>
+
+                {selectedIncident.resolution_image_path ? (
+                  <div className="modal-info-row single-column" style={{ marginTop: '16px' }}>
+                    <div className="modal-field">
+                      <label>Attached Proof of Resolution</label>
+                      <div className="modal-image-container success-border">
+                        {/\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i.test(selectedIncident.resolution_image_path) ? (
+                          <video
+                            src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
+                            className="modal-image"
+                            controls
+                            playsInline
+                            style={{ border: '3px solid #10b981' }}
+                          />
+                        ) : (
+                          <img
+                            src={`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`}
+                            alt="Resolution proof"
+                            className="modal-image"
+                            style={{ border: '3px solid #10b981' }}
+                            onClick={() => handleImageClick(`${BASE_URL}/uploads/resolutions/${selectedIncident.resolution_image_path}`)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="no-proof-warning">
+                    ⚠️ No photo or video proof was attached to this resolution.
+                  </div>
+                )}
               </div>
             )}
+
             {/* Additional Notes */}
             {selectedIncident.notes && (
               <div className="modal-info-row single-column">

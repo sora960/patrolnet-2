@@ -93,7 +93,7 @@ export default function AnnouncementPage({ showEmergencyContacts = true, showCom
     window.location.href = `tel:${number}`;
   };
 
-  const riskLevel = getRiskLevel();
+  const riskLevel = incidents.length >= 3 ? { level: "High", color: "#ef4444" } : { level: "Low", color: "#10b981" };
   const incidentTypes = getIncidentsByType();
   const maxCount = Math.max(...Object.values(incidentTypes), 1);
 

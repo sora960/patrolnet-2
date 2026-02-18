@@ -145,15 +145,6 @@ export const IncidentReportModal: React.FC<IncidentReportModalProps> = ({
               <Text style={styles.infoValue}>{log.ACTION || 'Not specified'}</Text>
             </View>
 
-            {/* Reported By */}
-            <View style={styles.infoSection}>
-              <View style={styles.infoLabel}>
-                <Ionicons name="person" size={20} color="#4CAF50" />
-                <Text style={styles.labelText}>Reported By</Text>
-              </View>
-              <Text style={styles.infoValue}>{log.USER}</Text>
-            </View>
-
             {/* Date and Time */}
             <View style={styles.infoSection}>
               <View style={styles.infoLabel}>

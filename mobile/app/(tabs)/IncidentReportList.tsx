@@ -109,7 +109,6 @@ const IncidentReportList: React.FC = () => {
         <Text style={[styles.cell, styles.idCell]}>{item.ID}</Text>
         <Text style={[styles.cell, styles.incidentCell]}>{item.Incident}</Text>
         <Text style={[styles.cell, styles.typeCell]}>{item.Type}</Text>
-        <Text style={[styles.cell, styles.reportedByCell]}>{item.ReportedBy}</Text>
         <Text style={[styles.cell, styles.locationCell]}>{item.Location}</Text>
         <Text style={[styles.cell, styles.statusCell]}>{item.Status}</Text>
         <TouchableOpacity onPress={() => handleViewDetails(item.ID)} style={styles.actionButton}>
@@ -147,7 +146,6 @@ const IncidentReportList: React.FC = () => {
         <Text style={[styles.headerCell, styles.idCell]}>ID</Text>
         <Text style={[styles.headerCell, styles.incidentCell]}>Incident</Text>
         <Text style={[styles.headerCell, styles.typeCell]}>Type</Text>
-        <Text style={[styles.headerCell, styles.reportedByCell]}>Reported By</Text>
         <Text style={[styles.headerCell, styles.locationCell]}>Location</Text>
         <Text style={[styles.headerCell, styles.statusCell]}>Status</Text>
         <Text style={[styles.headerCell, styles.actionsCell]}>Actions</Text>

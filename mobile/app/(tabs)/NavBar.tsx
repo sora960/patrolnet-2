@@ -385,7 +385,7 @@ const NavBar: React.FC<NavBarProps> = ({ username, userImage, userRole }) => {
   // Helper function to format incident display text
   const getIncidentDisplayText = (incident: IncidentReport) => {
     return `Incident Type: ${incident.type}
-Reported By: ${incident.reported_by}
+Reported By: Anonymous
 Location: ${incident.location}
 Status: ${incident.status}`;
   };
@@ -707,7 +707,7 @@ const IncidentDetailsModal: React.FC<IncidentDetailsModalProps> = ({ isVisible, 
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitle}>Incident Details</Text>
           <Text>Type: {incident.type}</Text>
-          <Text>Reported by: {incident.reported_by}</Text>
+          <Text>Reported by: "Anonymous"</Text>
           <Text>Location: {incident.location}</Text>
           <Text>Status: {incident.status}</Text>
           <View style={styles.modalButtons}>

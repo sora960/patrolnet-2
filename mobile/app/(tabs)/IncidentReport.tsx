@@ -668,11 +668,6 @@ const IncidentReport: React.FC = () => {
               <Text style={styles.statusText}>{getStatusText(incidentStatus)}</Text>
             </View>
           )}
-
-          <Text style={styles.label}>Reported by:</Text>
-          <Text style={styles.usernameDisplay}>
-            {isViewMode ? reportedBy : username}
-          </Text>
           
           <Text style={styles.label}>Type of incident:</Text>
           <View style={[styles.pickerContainer, isViewMode && styles.readOnlyInput]}>

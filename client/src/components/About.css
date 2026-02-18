@@ -373,14 +373,16 @@
 }
 
 .feature-list {
-  space-y: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem; /* This provides the vertical spacing */
   color: rgb(0, 0, 0);
 }
 
 .feature-item {
   display: flex;
   align-items: center;
-  margin-bottom: 1rem;
+  /* Removed margin-bottom to avoid double-spacing with gap */
 }
 
 .check {
@@ -430,7 +432,9 @@
 }
 
 .app-content {
-  space-y: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .incident-item {
@@ -439,7 +443,7 @@
   background: var(--white);
   padding: 1rem;
   border-radius: var(--border-radius);
-  margin-bottom: 1rem;
+  /* Removed margin-bottom to allow the parent's gap to handle spacing */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 

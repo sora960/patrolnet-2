@@ -2,9 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { MapPin, RefreshCw, AlertTriangle, Filter, BarChart3, Clock, MapPinIcon, Plus, X, ChevronDown, Smile, TrendingUp, Calendar } from 'lucide-react';
+import { MapPin, RefreshCw, AlertTriangle, Filter, BarChart3, Clock, MapPinIcon, Plus, X, ChevronDown, Smile, TrendingUp, Calendar, FileText } from 'lucide-react';
 import { BASE_URL } from '../config';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
+import BarangayReport from './BarangayReport';
+import { useMap } from 'react-leaflet';
+import 'leaflet.heat';
 
 // Fix for default markers in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -148,6 +151,37 @@ const AddTypeModal = ({ onClose, onAdd, newType, onChange, error }) => (
   </div>
 );
 
+
+// Internal component to render the heatmap layer
+const HeatmapLayer = ({ points }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!points || points.length === 0) return;
+
+    // Transform data: [lat, lng, intensity]
+    const heatPoints = points.map(p => [p.lat, p.lng, p.intensity]);
+
+    const heat = L.heatLayer(heatPoints, {
+      radius: 50, // INCREASED: Makes the spots bigger so they merge (less "dotty")
+      blur: 35,   // INCREASED: Makes the edges softer (more "subtle")
+      maxZoom: 17,
+      // EXACT COLORS: Only use Blue -> Orange -> Red
+      gradient: { 
+        0.2: '#3b82f6', // Low (Blue)
+        0.6: '#f59e0b', // Medium (Orange)
+        1.0: '#ef4444'  // High (Red)
+      } 
+    }).addTo(map);
+
+    return () => {
+      map.removeLayer(heat);
+    };
+  }, [points, map]);
+
+  return null;
+};
+
 function GISMapping({ showOnlyMap }) {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -159,6 +193,43 @@ function GISMapping({ showOnlyMap }) {
   const [newType, setNewType] = useState({ name: '', icon: '❓', color: '#6b7280' });
   const [addTypeError, setAddTypeError] = useState('');
   const [incidentTypeConfig, setIncidentTypeConfig] = useState(defaultIncidentTypes);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [heatmapData, setHeatmapData] = useState([]);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+
+  // Fetch Heatmap Data
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/analytics/heatmap`)
+      .then(res => res.json())
+      .then(data => setHeatmapData(data))
+      .catch(err => console.error("Heatmap error:", err));
+  }, [showHistory]);
+
+  // Calculate risk level based on incident frequency in a location
+  const getRiskLevel = useMemo(() => {
+    const riskMap = {};
+    incidents.forEach(incident => {
+      if (incident.location) {
+        riskMap[incident.location] = (riskMap[incident.location] || 0) + 1;
+      }
+    });
+    return riskMap;
+  }, [incidents]);
+
+  const getRiskColor = (location) => {
+    const count = getRiskLevel[location] || 0;
+    if (count >= 3) return "#ef4444"; // Red - High Risk
+    if (count >= 2) return "#f59e0b"; // Orange - Medium Risk
+    return "#3b82f6"; // Blue - Low Risk
+  };
+
+  const getRiskLevel_Text = (location) => {
+    const count = getRiskLevel[location] || 0;
+    if (count >= 3) return "High Risk";
+    if (count >= 2) return "Medium Risk";
+    return "Low Risk";
+  };
 
   const getIncidentConfig = (type) => incidentTypeConfig[type] || incidentTypeConfig['Other'];
 
@@ -200,8 +271,9 @@ function GISMapping({ showOnlyMap }) {
     const fetchData = async () => {
       try {
         setLoading(true);
+        const endpoint = showHistory ? `${BASE_URL}/api/incidents/complete/all` : `${BASE_URL}/api/incidents`;
         const [incRes, typesRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/incidents`),
+          fetch(endpoint),
           fetch(`${BASE_URL}/api/incident_types`)
         ]);
         if (!incRes.ok) throw new Error('Failed to fetch incidents');
@@ -221,7 +293,7 @@ function GISMapping({ showOnlyMap }) {
       }
     };
     fetchData();
-  }, []);
+  }, [showHistory]);
 
   const fetchIncidents = async () => {
     try {
@@ -252,7 +324,7 @@ function GISMapping({ showOnlyMap }) {
 
   const filteredIncidents = incidents.filter(i => {
     const matchType = filterType === 'All' || i.incident_type === filterType;
-    const matchSearch = [i.location, i.incident_type, i.reported_by].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchSearch = [i.location, i.incident_type].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchType && matchSearch;
   });
 
@@ -296,14 +368,41 @@ function GISMapping({ showOnlyMap }) {
             <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
           </div>
         ) : (
-          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {filteredIncidents.map(i => (
-              <Marker key={i.id} position={[parseFloat(i.latitude), parseFloat(i.longitude)]} icon={createCustomIcon(getIncidentConfig(i.incident_type).icon, getIncidentConfig(i.incident_type).color)}>
-                <Popup><strong>{i.incident_type}</strong><br />{i.location}</Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+          <div style={{ position: "relative", height: "100%" }}>
+    
+    
+  {/* SMART LEGEND: ONLY SHOW WHEN HEATMAP IS ON */}
+  {showHeatmap && (
+    <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: "white", padding: "10px", borderRadius: "8px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
+      <h4 style={{ margin: "0 0 8px 0", fontSize: "12px", fontWeight: 700, color: "#333" }}>
+        Risk Density
+      </h4>
+      
+      {/* HEATMAP LEGEND (Gradient Bar) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+        <div style={{ 
+          width: '100%', 
+          height: '12px', 
+          background: 'linear-gradient(to right, #3b82f6, #f59e0b, #ef4444)', 
+          borderRadius: '6px',
+          border: '1px solid #e5e7eb'
+        }}></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#6b7280', fontWeight: 500 }}>
+          <span>Low Frequency</span>
+          <span>High Frequency</span>
+        </div>
+      </div>
+    </div>
+  )}
+            <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {filteredIncidents.map(i => (
+                <Marker key={i.id} position={[parseFloat(i.latitude), parseFloat(i.longitude)]} icon={createCustomIcon(getIncidentConfig(i.incident_type).icon, getIncidentConfig(i.incident_type).color)}>
+                  <Popup><strong>{i.incident_type}</strong><br />{i.location}</Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
         )}
       </div>
     );
@@ -333,13 +432,34 @@ function GISMapping({ showOnlyMap }) {
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>GIS Incident Mapping</h1>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Real-time tracking & visualization</p>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Real-time tracking & visualization {showHistory && '(Historical Data)'}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button onClick={() => setShowHistory(!showHistory)} style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem',
+              background: showHistory ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : '#f3f4f6', 
+              color: showHistory ? 'white' : '#374151',
+              border: 'none', borderRadius: '20px', fontWeight: 500, cursor: 'pointer'
+            }}>
+              📊 {showHistory ? 'Active Only' : 'View History'}
+            </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f0fdf4', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.875rem', color: '#166534' }}>
               <div style={{ width: 8, height: 8, background: '#22c55e', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
-              {filteredIncidents.length} Active
+              {filteredIncidents.length} {showHistory ? 'Total' : 'Active'}
             </div>
+
+              <button onClick={() => setShowHeatmap(!showHeatmap)} style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem',
+              background: showHeatmap ? '#f59e0b' : '#f3f4f6', 
+              color: showHeatmap ? 'white' : '#374151',
+              border: 'none', borderRadius: '20px', fontWeight: 500, cursor: 'pointer'
+            }}>
+              🔥 {showHeatmap ? 'Heatmap ON' : 'Show Heatmap'}
+            </button>
+
+
+
+
             <button onClick={fetchIncidents} disabled={loading} style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem',
               background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white',
@@ -400,18 +520,24 @@ function GISMapping({ showOnlyMap }) {
             <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <MapPinIcon size={16} /> Legend
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {Object.entries(incidentTypeConfig).map(([type, cfg]) => (
-                <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%', border: '2px solid white',
-                    background: `linear-gradient(135deg, ${cfg.color}, ${cfg.color}dd)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
-                  }}>{cfg.icon}</div>
-                  <span style={{ fontSize: '0.8125rem', color: '#374151' }}>{type}</span>
-                </div>
-              ))}
+
+
+            {/* Incident Types Legend */}
+            <div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.5rem' }}>INCIDENT TYPES</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {Object.entries(incidentTypeConfig).map(([type, cfg]) => (
+                  <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: '50%', border: '2px solid white',
+                      background: `linear-gradient(135deg, ${cfg.color}, ${cfg.color}dd)`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                    }}>{cfg.icon}</div>
+                    <span style={{ fontSize: '0.8125rem', color: '#374151' }}>{type}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <button onClick={() => setShowAddTypeModal(true)} style={{
               width: '100%', marginTop: '0.75rem', padding: '0.5rem', border: '1px dashed #d1d5db',
@@ -447,6 +573,7 @@ function GISMapping({ showOnlyMap }) {
         {/* Map + Recent Incidents Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Map */}
+          <div className="print-only" style={{ display: "none", textAlign: "center", marginBottom: "20px" }}><h1>REPUBLIC OF THE PHILIPPINES</h1><h2>Barangay Tignoan Official Incident Report</h2><hr/></div>
           <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ height: '500px', borderRadius: '8px', overflow: 'hidden' }}>
               {loading ? (
@@ -461,48 +588,86 @@ function GISMapping({ showOnlyMap }) {
                   <button onClick={fetchIncidents} style={{ padding: '0.5rem 1rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Retry</button>
                 </div>
               ) : (
-                <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-                  {filteredIncidents.map(incident => (
-                    <Marker
-                      key={incident.id}
-                      position={[parseFloat(incident.latitude), parseFloat(incident.longitude)]}
-                      icon={createCustomIcon(getIncidentConfig(incident.incident_type).icon, getIncidentConfig(incident.incident_type).color)}
-                    >
-                      <Popup>
-                        <div style={{ minWidth: 220, padding: '0.25rem' }}>
-                          <h4 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {getIncidentConfig(incident.incident_type).icon} {incident.incident_type}
-                          </h4>
-                          <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
-                            <strong>📍 Location:</strong> {incident.location}
-                          </p>
-                          <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
-                            <strong>📅 Date:</strong> {formatDateTime(incident.datetime)}
-                          </p>
-                          <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
-                            <strong>👤 Reported by:</strong> {incident.reported_by}
-                          </p>
-                          <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
-                            <strong>🗺️ Coords:</strong> {parseFloat(incident.latitude).toFixed(4)}, {parseFloat(incident.longitude).toFixed(4)}
-                          </p>
-                          <div style={{ marginTop: '0.5rem' }}>
-                            <span style={{ ...getStatusStyle(incident.status), padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 500 }}>
-                              {incident.status}
-                            </span>
+                <div style={{ position: "relative", height: "100%" }}>
+
+                {/* SMART LEGEND: ONLY SHOW WHEN HEATMAP IS ON */}
+{showHeatmap && (
+  <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: "white", padding: "10px", borderRadius: "8px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
+    <h4 style={{ margin: "0 0 8px 0", fontSize: "12px", fontWeight: 700, color: "#333" }}>
+      Risk Density
+    </h4>
+    
+    {/* HEATMAP LEGEND (Gradient Bar) */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+      <div style={{ 
+        width: '100%', 
+        height: '12px', 
+        background: 'linear-gradient(to right, #3b82f6, #f59e0b, #ef4444)', 
+        borderRadius: '6px',
+        border: '1px solid #e5e7eb'
+      }}></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#6b7280', fontWeight: 500 }}>
+        <span>Low Frequency</span>
+        <span>High Frequency</span>
+      </div>
+    </div>
+  </div>
+)}
+
+  
+                  <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
+                    {showHeatmap ? (
+                    <HeatmapLayer points={heatmapData} />
+                      ) : (
+                        filteredIncidents.map(incident => (
+                      <Marker
+                        key={incident.id}
+                        position={[parseFloat(incident.latitude), parseFloat(incident.longitude)]}
+                        icon={createCustomIcon(getIncidentConfig(incident.incident_type).icon, getRiskColor(incident.location))}
+                      >
+                        <Popup>
+                          <div style={{ minWidth: 220, padding: '0.25rem' }}>
+                            <h4 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {getIncidentConfig(incident.incident_type).icon} {incident.incident_type}
+                            </h4>
+                            <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
+                              <strong>📍 Location:</strong> {incident.location}
+                            </p>
+                            <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
+                              <strong>📅 Reported:</strong> {formatDateTime(incident.datetime)}
+                            </p>
+                            <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#374151' }}>
+                              <strong>🗺️ Coords:</strong> {parseFloat(incident.latitude).toFixed(4)}, {parseFloat(incident.longitude).toFixed(4)}
+                            </p>
+                            <p style={{ margin: '0.375rem 0', fontSize: '0.875rem', color: '#dc2626', fontWeight: 600 }}>
+                              <strong>⚠️ Risk Level:</strong> {getRiskLevel_Text(incident.location)}
+                            </p>
+                            <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                              <span style={{ ...getStatusStyle(incident.status), padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {incident.status}
+                              </span>
+                            </div>
+                            {incident.status === 'Resolved' && incident.resolved_at && (
+                              <div style={{ fontSize: '0.75rem', color: '#059669', marginBottom: '0.5rem', padding: '0.5rem', background: '#ecfdf5', borderRadius: '6px' }}>
+                                <div>✅ <strong>Resolved by:</strong> {incident.resolved_by || 'System'}</div>
+                                <div>📅 <strong>At:</strong> {formatDateTime(incident.resolved_at)}</div>
+                              </div>
+                            )}
+                            {incident.image && (
+                              <img
+                                src={`${BASE_URL}/uploads/${incident.image}`}
+                                alt="Incident"
+                                style={{ marginTop: '0.75rem', width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '8px' }}
+                              />
+                            )}
                           </div>
-                          {incident.image && (
-                            <img
-                              src={`${BASE_URL}/uploads/${incident.image}`}
-                              alt="Incident"
-                              style={{ marginTop: '0.75rem', width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '8px' }}
-                            />
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
+                        </Popup>
+                      </Marker>
+                    ))
+                  )}
+                  </MapContainer>
+                </div>
               )}
             </div>
           </div>
@@ -528,7 +693,7 @@ function GISMapping({ showOnlyMap }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <div style={{
                         width: 40, height: 40, borderRadius: '50%', border: '2px solid white',
-                        background: `linear-gradient(135deg, ${getIncidentConfig(incident.incident_type).color}, ${getIncidentConfig(incident.incident_type).color}dd)`,
+                        background: `linear-gradient(135deg, ${getRiskColor(incident.location)}, ${getRiskColor(incident.location)}dd)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
                         boxShadow: '0 2px 8px rgba(0,0,0,0.15)', flexShrink: 0
                       }}>
@@ -543,7 +708,7 @@ function GISMapping({ showOnlyMap }) {
                         </div>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <span style={{
                         ...getStatusStyle(incident.status),
                         padding: '3px 10px', borderRadius: '12px', fontSize: '0.6875rem', fontWeight: 500,
@@ -554,6 +719,13 @@ function GISMapping({ showOnlyMap }) {
                       <div style={{ fontSize: '0.6875rem', color: '#9ca3af', marginTop: '4px' }}>
                         {formatDateTime(incident.datetime)}
                       </div>
+                      <button onClick={() => setSelectedIncident(incident)} style={{
+                        marginTop: '4px', padding: '3px 8px', borderRadius: '6px', border: 'none',
+                        background: '#f3f4f6', color: '#374151', fontSize: '0.625rem', fontWeight: 500,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px'
+                      }}>
+                        <FileText size={10} /> Report
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -658,6 +830,11 @@ function GISMapping({ showOnlyMap }) {
           </div>
         </div>
       </main>
+
+      {/* Barangay Report Modal */}
+      {selectedIncident && (
+        <BarangayReport incident={selectedIncident} onClose={() => setSelectedIncident(null)} />
+      )}
     </div>
   );
 }
