@@ -20,8 +20,6 @@ const AdminSidebar = ({ currentUser, onLogout }) => {
   const previousIncidentsCountRef = useRef(0);
   const isInitialLoadRef = useRef(true);
 
-1
-
   const stopAlertSound = () => {
     if (alertAudioRef.current.oscillator) {
       try {
