@@ -28,6 +28,12 @@ function ActivityDetailsModal({ isOpen, onClose, activity }) {
 
   const resolutionImageUrl = activity.resolutionImage ? `${BASE_URL}/uploads/resolutions/${activity.resolutionImage}` : null;
 
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  
   return (
     <div style={modalOverlayStyles} onClick={onClose}>
       <div style={modalContentStyles} onClick={(e) => e.stopPropagation()}>
