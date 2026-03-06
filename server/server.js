@@ -1397,10 +1397,10 @@ app.get("/api/incidents/reports-history/:username", (req, res) => {
 
 // Email verification code generation and sending
 app.post("/pre-register-send-code", (req, res) => {
-  const { email, username } = req.body;
+  const { email } = req.body;
 
-  if (!email || !username) {
-    return res.status(400).json({ success: false, message: "Email and username are required" });
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email is required" });
   }
 
   // Generate a 6-digit numeric code
@@ -1432,8 +1432,8 @@ app.post("/pre-register-send-code", (req, res) => {
       });
     } else {
       // If email does not exist, insert a new record with 'Pending' status
-      const insertSql = "INSERT INTO users (USER, EMAIL, STATUS, email_verification_code, email_verification_code_expires_at) VALUES (?, ?, ?, ?)";
-      db.query(insertSql, [email, "Pending", verificationCode, expiresAt], (insertErr, insertResult) => {
+      const insertSql = "INSERT INTO users (USER, EMAIL, PASSWORD, NAME, ROLE, IMAGE, STATUS, email_verification_code, email_verification_code_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+      db.query(insertSql, [email, email, "temp_password", email, "Resident", "default_avatar.png", "Pending", verificationCode, expiresAt], (insertErr, insertResult) => {
         if (insertErr) {
           console.error("❌ SQL error inserting new user for verification:", insertErr);
           return res.status(500).json({ success: false, message: "Database error" });
