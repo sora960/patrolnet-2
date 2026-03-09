@@ -1,50 +1,149 @@
-# Welcome to your Expo app 👋
+# PatrolNet — Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The Expo/React Native mobile application for PatrolNet. Available to **Tanod officers** and **Residents**.
 
-## Get started
+---
 
-1. Install dependencies
+## Prerequisites
 
-   ```bash
-   npm install
-   ```
+| Tool | Notes |
+|------|-------|
+| [Node.js](https://nodejs.org) ≥ 18 | Required |
+| [Expo Go](https://expo.dev/go) | Install on your Android/iOS device for quick testing |
+| [Android Studio](https://developer.android.com/studio) | Required only if using an Android emulator instead of a physical device |
+| [Expo CLI](https://docs.expo.dev/get-started/installation/) | Install globally: `npm install -g expo-cli` |
 
-2. Start the app
+> The mobile app and the server **must be on the same Wi-Fi network** so the device can reach the API.
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Installation
 
 ```bash
-npm run reset-project
+cd mobile
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## Configuration
 
-To learn more about developing your project with Expo, look at the following resources:
+Create a `.env` file in the `mobile/` directory:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```env
+EXPO_PUBLIC_API_URL=http://<your-local-ip>:3001
+```
 
-## Join the community
+Replace `<your-local-ip>` with the **local IP address** of the machine running the server (e.g. `192.168.1.32`). Do **not** use `localhost` — it won't work on a physical device or emulator.
 
-Join our community of developers creating universal apps.
+**Finding your local IP:**
+- **Linux/macOS:** `ip addr` or `ifconfig`
+- **Windows:** `ipconfig`
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## Running the App
+
+### With Expo Go (Recommended for Development)
+
+```bash
+npx expo start
+```
+
+A QR code will appear in the terminal. Scan it with the **Expo Go** app on your phone.
+
+### Android Emulator
+
+Make sure Android Studio is open with an emulator running, then press `a` in the Expo terminal, or:
+
+```bash
+npm run android
+```
+
+### iOS Simulator (macOS only)
+
+Press `i` in the Expo terminal, or:
+
+```bash
+npm run ios
+```
+
+---
+
+## Features
+
+### 🟡 Tanod
+| Feature | Description |
+|---------|-------------|
+| **Attendance** | Clock-in / clock-out with photo & video proof |
+| **Incident Reports** | View assigned incidents, update status |
+| **Patrol Logs** | Log patrol activities with location |
+| **Schedule** | View shift assignments |
+| **Announcements** | Read barangay notices |
+| **Messaging** | In-app communication |
+
+### 🟢 Resident
+| Feature | Description |
+|---------|-------------|
+| **Incident Reports** | Submit new incident reports with location |
+| **SOS** | One-tap emergency alert from the login screen |
+| **Announcements** | Read barangay notices |
+| **Community Hub** | View community content |
+
+---
+
+## Testing the SOS Feature
+
+The **SOS button** is visible on the **Login screen** — no login required.
+
+1. Open the app to the Login screen.
+2. **Log in at least once first** to store your user data locally (the SOS uses your saved `userId` and `username`).
+3. Log out or navigate back to Login.
+4. Tap the red **SOS** circle button.
+5. Grant location permission when prompted.
+6. The app will fetch your GPS coordinates, reverse-geocode the address, and send a `POST /sos-report` request to the server.
+7. A success alert confirms the report was saved. You can verify the incident in the web admin dashboard.
+
+**To test the backend directly without the app:**
+
+```bash
+curl -X POST http://<server-ip>:3001/sos-report \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "1",
+    "username": "test_user",
+    "latitude": 14.5995,
+    "longitude": 120.9842,
+    "location": "Test Location, Manila"
+  }'
+```
+
+---
+
+## Project Structure
+
+```
+mobile/
+├── app/
+│   └── (tabs)/
+│       ├── Login.tsx          # Login + SOS button
+│       ├── Home.tsx           # Main dashboard
+│       ├── IncidentReport.tsx # Submit/view incidents
+│       ├── Attendance.tsx     # Clock-in / clock-out
+│       └── ...
+├── components/
+├── config.js                  # BASE_URL resolution (reads EXPO_PUBLIC_API_URL)
+├── .env                       # Your local server IP
+└── app.config.js
+```
+
+---
+
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npx expo start` | Start the Expo dev server (scan QR with Expo Go) |
+| `npm run android` | Launch on Android emulator / connected device |
+| `npm run ios` | Launch on iOS simulator (macOS only) |
+| `npm run web` | Run as a web app in the browser |

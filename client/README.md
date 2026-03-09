@@ -1,70 +1,118 @@
-# Getting Started with Create React App
+# PatrolNet — Web Client
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The React-based web dashboard for PatrolNet. Designed for **Admins**, **Tanod officers**, and **Residents** to manage patrol operations, incidents, schedules, and more.
+
+---
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) ≥ 18
+- The **PatrolNet server** must be running on `http://localhost:3001` (see [`server/`](../server/))
+
+---
+
+## Installation
+
+```bash
+cd client
+npm install
+```
+
+---
+
+## Running the App
+
+### Development Mode (hot reload)
+
+```bash
+npm start
+```
+
+Opens at [http://localhost:3000](http://localhost:3000). The page reloads automatically when you save changes.
+
+### Production Build
+
+Build the optimized static bundle:
+
+```bash
+npm run build
+```
+
+Serve the production build locally:
+
+```bash
+npx serve -s build
+```
+
+The app will be available at [http://localhost:3000](http://localhost:3000) (or whichever port `serve` assigns).
+
+---
+
+## Features by Role
+
+### 🔴 Admin
+| Feature | Description |
+|---------|-------------|
+| **Dashboard** | Overview stats and live activity |
+| **Accounts** | Manage all user accounts and roles |
+| **Incident Reports** | View, assign, and resolve all incidents |
+| **GIS Mapping** | Live patrol map with incident markers |
+| **Schedule Assignment** | Assign tanod shifts and schedules |
+| **Patrol Logs** | Full log history of tanod patrols |
+| **Attendance** | Monitor tanod check-ins and proof |
+| **Announcements** | Post and manage barangay-wide notices |
+| **Barangay Reports** | Generate and download reports |
+| **Community Hub** | Manage community content |
+| **Firewall** | IP blocklist and access log management |
+| **Tourist Spots** | Manage local tourist spot listings |
+
+### 🟡 Tanod
+| Feature | Description |
+|---------|-------------|
+| **Incident Reports** | View and respond to assigned incidents |
+| **GIS Map** | View patrol area and incident locations |
+| **Patrol Logs** | Log patrol activities |
+| **Attendance** | Time-in / time-out with proof upload |
+| **Schedule** | View assigned schedules |
+| **Announcements** | Read barangay notices |
+
+### 🟢 Resident
+| Feature | Description |
+|---------|-------------|
+| **Incident Reports** | Submit new incident reports |
+| **Announcements** | Read barangay notices |
+| **Community Hub** | View community content |
+| **Tourist Spots** | Browse local attractions |
+
+---
+
+## Project Structure
+
+```
+client/
+├── public/
+└── src/
+    ├── components/       # All page components and modals
+    │   ├── Login.jsx
+    │   ├── Dashboard.jsx
+    │   ├── GISmapping.jsx
+    │   ├── Incident_Report.jsx
+    │   ├── Attendance.jsx
+    │   ├── ScheduleAssignment.jsx
+    │   ├── Patrollogs.jsx
+    │   ├── Announcements.jsx
+    │   ├── Firewall.jsx
+    │   ├── BarangayReport.jsx
+    │   └── ...
+    └── App.js
+```
+
+---
 
 ## Available Scripts
 
-In the project directory, you can run:
-
-### `npm start`
-
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start development server with hot reload |
+| `npm run build` | Build optimized production bundle to `build/` |
+| `npx serve -s build` | Serve the production build statically |
