@@ -105,13 +105,19 @@ const Register: React.FC = () => {
       } else {
         Alert.alert("Error", response.data.message || "Failed to send code.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Email verification error:", error);
-      Alert.alert("Error", "Could not send verification code. Please try again.");
+      if (error.response) {
+        const serverMessage = error.response.data?.message || "Invalid email request.";
+        Alert.alert("Verification Error", serverMessage);
+      } else {
+        Alert.alert("Error", "Could not reach the server. Check your BASE_URL.");
+      }
     } finally {
       setVerificationLoading(false);
     }
   };
+
 
   const handleVerifyCode = async () => {
     if (!emailVerificationCode) {
@@ -370,7 +376,7 @@ const Register: React.FC = () => {
                 </Picker>
               </View>
               <Text style={styles.roleDescription}>
-                {role === 'Resident' 
+                {role === 'Resident'
                   ? 'Report incidents and receive safety alerts'
                   : 'Respond to emergencies and manage reports'
                 }
@@ -407,7 +413,7 @@ const Register: React.FC = () => {
             {/* Footer */}
             <View style={styles.footerSection}>
               <Text style={styles.footerText}>Already have credentials?</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => navigation.replace("Login")}
                 style={styles.backButton}
                 activeOpacity={0.7}

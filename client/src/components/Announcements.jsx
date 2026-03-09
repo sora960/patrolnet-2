@@ -82,12 +82,7 @@ export default function AnnouncementPage({ showEmergencyContacts = true, showCom
     return types;
   };
 
-  const getRiskLevel = () => {
-    const activeIncidents = incidents.filter(i => i.status === 'active').length;
-    if (activeIncidents >= 5) return { level: 'High', color: '#ef4444' };
-    if (activeIncidents >= 2) return { level: 'Moderate', color: '#f59e0b' };
-    return { level: 'Low', color: '#10b981' };
-  };
+
 
   const handleCall = (number) => {
     window.location.href = `tel:${number}`;

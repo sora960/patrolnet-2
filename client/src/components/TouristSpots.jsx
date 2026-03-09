@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { BASE_URL } from "../config";
 import "./TouristSpots.css"; 
-import { Plus, X, Image, Type, Trash2, Edit, MapPin, FileText, Loader } from "lucide-react";
+import { Plus, X, Image, Type, Trash2, Edit, MapPin, Loader } from "lucide-react";
 
 const TouristSpots = () => {
   const [touristSpots, setTouristSpots] = useState([]);

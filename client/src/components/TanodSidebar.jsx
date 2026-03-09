@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import './Sidebar.css'; // Assuming common CSS
 import UserProfileModal from './UserProfileModal';
 import { BASE_URL } from '../config';
@@ -12,7 +12,7 @@ const TanodSidebar = ({ currentUser, onLogout }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAlertPlaying, setIsAlertPlaying] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+
   const alertAudioRef = useRef({ context: null, oscillator: null, gain: null });
   const audioContextRef = useRef(null);
   const location = useLocation();
@@ -242,11 +242,9 @@ const TanodSidebar = ({ currentUser, onLogout }) => {
         if (context.state === 'suspended') {
           context.resume().then(() => {
             console.log('✅ Audio enabled - ready for emergency alerts');
-            setAudioEnabled(true);
           });
         } else {
           console.log('✅ Audio enabled - ready for emergency alerts');
-          setAudioEnabled(true);
         }
       }
     };
@@ -293,6 +291,7 @@ const TanodSidebar = ({ currentUser, onLogout }) => {
         document.removeEventListener(event, initAudio);
       });
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Clear notification count when visiting incident report page
@@ -305,6 +304,7 @@ const TanodSidebar = ({ currentUser, onLogout }) => {
 
       return () => clearTimeout(timeoutId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   // Fetch user profile data
@@ -338,6 +338,7 @@ const TanodSidebar = ({ currentUser, onLogout }) => {
 
   useEffect(() => {
     fetchUserProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const toggleProfileDropdown = () => {

@@ -90,19 +90,7 @@ const ScheduleAssignment = () => {
     }
   };
 
-  // Function to calculate status based on logs
-  const calculateStatusFromLogs = async (username) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/api/user-time-status/${username}`);
-      if (response.data && response.data.success) {
-        return response.data.calculatedStatus || 'Off Duty';
-      }
-      return 'Off Duty';
-    } catch (error) {
-      console.error(`Error calculating status for ${username}:`, error);
-      return 'Off Duty';
-    }
-  };
+
 
   // Function to load schedules from the database with calculated status and log times
   const loadSchedules = async () => {
@@ -188,6 +176,7 @@ const ScheduleAssignment = () => {
     }, 30000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleClick = (person) => {

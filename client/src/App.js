@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import Login from './components/Login.jsx';
 import About from "./components/About.jsx";
 import IncidentReport from "./components/Incident_Report.jsx";
@@ -18,7 +18,7 @@ import Download from "./components/Donwload.jsx";
 import MainSidebarWrapper from "./components/MainSidebarWrapper.jsx";
 import Messages from "./components/Messages.jsx";
 import ContactUs from "./components/ContactUs.jsx";
-import ResidentLandingPage from "./components/ResidentLandingPage.jsx";
+
 import TouristSpots from "./components/TouristSpots.jsx";
 import './i18n'; 
 import Attendance from "./components/Attendance.jsx";
@@ -125,7 +125,7 @@ function AppContent() {
   const location = useLocation();
   const [showLogin, setShowLogin] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+
 
   // Derive isLoggedIn and userRole directly from localStorage on every render
   const initialIsLoggedIn = localStorage.getItem("isLoggedIn") === "true";

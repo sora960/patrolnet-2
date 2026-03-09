@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MoreVertical, Phone, Video, Send, Paperclip, Smile, Filter, Shield, Users, MapPin, AlertTriangle, Mail, User, Clock, MessageSquare } from 'lucide-react';
+import { Search, MoreVertical, Phone, Send, Paperclip, Filter, Shield, Users, MapPin, AlertTriangle, Mail, User, Clock, MessageSquare } from 'lucide-react';
 import { BASE_URL } from '../config';
 
 const Message = () => {

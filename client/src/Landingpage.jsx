@@ -1327,7 +1327,7 @@ function Landingpage({ onLoginClick }) {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [filteredContent, setFilteredContent] = useState([]);
-  const [expandedMilestone, setExpandedMilestone] = useState(null);
+
   const [animatedStats, setAnimatedStats] = useState({ routes: 0, monitoring: 0, coverage: 0 });
   const [hasAnimatedStats, setHasAnimatedStats] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -1770,6 +1770,7 @@ function ImageGalleryCarousel({ galleryData }) {
     return () => {
       clearInterval(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isHovering, galleryData.length]);
 
   const nextImage = () => {
@@ -2408,72 +2409,6 @@ function AnnouncementsCarousel({ announcements }) {
   );
 }
 
-// Timeline Carousel Component
-function TimelineCarousel({ timelineData }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  const nextSlide = () => {
-    setCurrentIndex((prev) => (prev + 1) % timelineData.length);
-  };
-
-  const prevSlide = () => {
-    setCurrentIndex((prev) => (prev - 1 + timelineData.length) % timelineData.length);
-  };
-
-  const currentItem = timelineData[currentIndex];
-
-  return (
-    <div style={styles.timelineContainer}>
-      <h4 style={styles.timelineTitle}>Historical Timeline</h4>
-      
-      <div style={styles.carouselWrapper}>
-        <button 
-          onClick={prevSlide} 
-          style={styles.carouselButton}
-          aria-label="Previous timeline event"
-          className="carousel-button"
-        >
-          <span style={styles.carouselArrow}>‹</span>
-        </button>
-
-        <div style={styles.carouselCard} className="timeline-card-animate">
-          <div style={styles.carouselMarker}>{currentItem.year}</div>
-          <div style={styles.carouselContent}>
-            <h5 style={styles.carouselTitle}>{currentItem.title}</h5>
-            <p style={styles.carouselText}>{currentItem.description}</p>
-          </div>
-          
-          <div style={styles.carouselIndicators}>
-            {timelineData.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentIndex(index)}
-                style={{
-                  ...styles.indicator,
-                  ...(index === currentIndex ? styles.indicatorActive : {})
-                }}
-                aria-label={`Go to timeline ${index + 1}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <button 
-          onClick={nextSlide} 
-          style={styles.carouselButton}
-          aria-label="Next timeline event"
-          className="carousel-button"
-        >
-          <span style={styles.carouselArrow}>›</span>
-        </button>
-      </div>
-
-      <div style={styles.carouselCounter}>
-        {currentIndex + 1} / {timelineData.length}
-      </div>
-    </div>
-  );
-}
 
 // Activities Carousel Component
 function ActivitiesCarousel({ activities }) {

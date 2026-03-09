@@ -13,9 +13,6 @@ import {
   FaEyeSlash,
   FaUserPlus,
   FaCheck,
-  FaExclamationTriangle,
-  FaShieldAlt,
-  FaUsers,
   FaHome,
   FaPaperPlane
 } from 'react-icons/fa';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BASE_URL } from '../../config'; // Import BASE_URL
-import { User, Clock, MapPin, Info, Image as ImageIcon, CheckCircle, Printer } from 'lucide-react'; // Import icons
+import { User, Clock, MapPin, Info, CheckCircle, Printer } from 'lucide-react'; // Import icons
 
 function ActivityDetailsModal({ isOpen, onClose, activity }) {
   if (!isOpen || !activity) {

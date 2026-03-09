@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapPin, RefreshCw, AlertTriangle, Filter, BarChart3, Clock, MapPinIcon, Plus, X, ChevronDown, Smile, TrendingUp, Calendar, FileText } from 'lucide-react';
 import { BASE_URL } from '../config';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
 import BarangayReport from './BarangayReport';
 import { useMap } from 'react-leaflet';
 import 'leaflet.heat';
@@ -332,6 +332,7 @@ function GISMapping({ showOnlyMap }) {
     const counts = {};
     incidents.forEach(i => { const t = i.incident_type || 'Other'; counts[t] = (counts[t] || 0) + 1; });
     return Object.entries(counts).map(([name, count]) => ({ name, count, fill: getIncidentConfig(name).color }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidents, incidentTypeConfig]);
 
   const monthlyChartData = useMemo(() => {
