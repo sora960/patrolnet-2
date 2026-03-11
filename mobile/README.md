@@ -10,8 +10,6 @@ The Expo/React Native mobile application for PatrolNet. Available to **Tanod off
 |------|-------|
 | [Node.js](https://nodejs.org) ≥ 18 | Required |
 | [Expo Go](https://expo.dev/go) | Install on your Android/iOS device for quick testing |
-| [Android Studio](https://developer.android.com/studio) | Required only if using an Android emulator instead of a physical device |
-| [Expo CLI](https://docs.expo.dev/get-started/installation/) | Install globally: `npm install -g expo-cli` |
 
 > The mobile app and the server **must be on the same Wi-Fi network** so the device can reach the API.
 
@@ -44,13 +42,15 @@ Replace `<your-local-ip>` with the **local IP address** of the machine running t
 
 ## Running the App
 
-### With Expo Go (Recommended for Development)
+### With Expo Go (Recommended for first-time setup)
 
 ```bash
-npx expo start
+npm run start:go
 ```
 
-A QR code will appear in the terminal. Scan it with the **Expo Go** app on your phone.
+A QR code will appear in the terminal. Scan it with the **[Expo Go](https://expo.dev/go)** app on your phone.
+
+> ⚠️ **Do not use `npx expo start` directly** — this project has `expo-dev-client` installed, which changes the QR code format to one that requires a pre-built custom APK. Use `npm run start:go` to generate a standard Expo Go-compatible QR code instead.
 
 ### Android Emulator
 
@@ -143,7 +143,7 @@ mobile/
 
 | Command | Description |
 |---------|-------------|
-| `npx expo start` | Start the Expo dev server (scan QR with Expo Go) |
-| `npm run android` | Launch on Android emulator / connected device |
-| `npm run ios` | Launch on iOS simulator (macOS only) |
+| `npm start` | Start dev server — scan QR with the **Expo Go** app |
+| `npm run android` | Build dev client and launch on Android (requires Android Studio) |
+| `npm run ios` | Build dev client and launch on iOS simulator (macOS only) |
 | `npm run web` | Run as a web app in the browser |

@@ -24,15 +24,6 @@ export default {
       },
       edgeToEdgeEnabled: true,
       package: 'app.barangay.incidentreport',
-      permissions: ['ACCESS_NETWORK_STATE'],
-      // By setting googleServicesFile to an empty string, we are explicitly telling Expo
-      // not to use any Firebase configuration for this Android app.
-      googleServicesFile: '',
-      config: {
-        googleMaps: {
-          apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_HERE',
-        },
-      },
     },
     web: {
       bundler: 'metro',
