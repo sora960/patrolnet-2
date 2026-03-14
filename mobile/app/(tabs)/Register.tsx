@@ -105,9 +105,15 @@ const Register: React.FC = () => {
       } else {
         Alert.alert("Error", response.data.message || "Failed to send code.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Email verification error:", error);
-      Alert.alert("Error", "Could not send verification code. Please try again.");
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+        Alert.alert("Error", error.response.data.message || error.response.data.error || "Failed to send verification code.");
+      } else {
+        Alert.alert("Error", "Could not send verification code. Please try again.");
+      }
     } finally {
       setVerificationLoading(false);
     }
